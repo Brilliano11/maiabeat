@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { deletePlaylistForUser, renamePlaylistForUser } from "@/lib/library/server";
 
 export async function PATCH(request: Request, context: RouteContext<"/api/library/playlists/[id]">) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
 
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/librar
 }
 
 export async function DELETE(_request: Request, context: RouteContext<"/api/library/playlists/[id]">) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
 

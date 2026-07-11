@@ -96,7 +96,6 @@ export type AppUser = {
   id: string;
   email: string;
   displayName: string;
-  isAllowed: boolean;
 };
 
 export type SpotifyProfile = {

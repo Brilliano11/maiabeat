@@ -203,11 +203,11 @@ export function AppShell({
   const syncQueueFromServer = usePlayerStore((state) => state.syncQueueFromServer);
 
   useEffect(() => {
-    if (user?.isAllowed) {
+    if (user) {
       void syncFromServer();
       void syncQueueFromServer();
     }
-  }, [syncFromServer, syncQueueFromServer, user?.isAllowed]);
+  }, [syncFromServer, syncQueueFromServer, user]);
 
   if (!withNav) {
     return (

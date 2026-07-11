@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import {
   type SpotifySearchType,
   searchSpotifyCatalogForUser,
@@ -22,7 +22,7 @@ function safeSearchType(type: string | null): SpotifySearchType {
 }
 
 export async function GET(request: Request) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   const { searchParams } = new URL(request.url);

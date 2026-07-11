@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { mapSpotifyAlbum, spotifyFetchForUser } from "@/lib/spotify/server";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
   const { searchParams } = new URL(request.url);

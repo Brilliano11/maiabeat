@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { getLibrarySnapshot } from "@/lib/library/server";
 import { mapSpotifyPlaylist, mapSpotifyTrackToSong, spotifyFetchForUser } from "@/lib/spotify/server";
 import type { QueueItem } from "@/lib/types";
@@ -10,7 +10,7 @@ function pagination(limit: number, offset: number, total: number) {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
   const { searchParams } = new URL(request.url);

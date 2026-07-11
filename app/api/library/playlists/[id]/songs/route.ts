@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import {
   addSongToPlaylistForUser,
   removeSongFromPlaylistForUser,
@@ -7,7 +7,7 @@ import {
 import type { Song } from "@/lib/types";
 
 export async function POST(request: Request, context: RouteContext<"/api/library/playlists/[id]/songs">) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
 
@@ -25,7 +25,7 @@ export async function POST(request: Request, context: RouteContext<"/api/library
 }
 
 export async function DELETE(request: Request, context: RouteContext<"/api/library/playlists/[id]/songs">) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
 

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { removeQueueItemForUser } from "@/lib/library/server";
 
 export async function DELETE(_request: Request, context: RouteContext<"/api/library/queue/[id]">) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { id } = await context.params;
 

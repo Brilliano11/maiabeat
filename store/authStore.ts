@@ -9,23 +9,13 @@ type AuthState = {
   user: AppUser | null;
   loading: boolean;
   error: string | null;
-  privateMessage: string;
   isLoggedIn: () => boolean;
   continueAsGuest: () => void;
   restoreSession: () => Promise<boolean>;
-  checkAllowedEmail: (email: string) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
   register: (displayName: string, email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
 };
-
-const privateMessage = "Maiabeat is invite-only. Ask the owner for access.";
-
-async function allowedByServer(email: string) {
-  const response = await fetch(`/api/auth/allowed?email=${encodeURIComponent(email)}`);
-  const data = (await response.json()) as { allowed?: boolean };
-  return Boolean(data.allowed);
-}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -33,12 +23,11 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       loading: false,
       error: null,
-      privateMessage,
       isLoggedIn: () => Boolean(get().user),
       continueAsGuest: () => {
         if (process.env.NODE_ENV === "production") {
           set({
-            error: "Guest mode is disabled. Login with an invited email.",
+            error: "Guest mode is disabled. Login or create an account.",
             user: null,
           });
           return;
@@ -50,7 +39,6 @@ export const useAuthStore = create<AuthState>()(
             id: "local-preview",
             email: "preview@maiabeat.local",
             displayName: "Anggita",
-            isAllowed: true,
           },
         });
       },
@@ -60,7 +48,6 @@ export const useAuthStore = create<AuthState>()(
         const { data, error } = await supabase!.auth.getUser();
         if (error || !data.user?.email) return false;
 
-        const allowed = await get().checkAllowedEmail(data.user.email);
         set({
           user: {
             id: data.user.id,
@@ -68,27 +55,13 @@ export const useAuthStore = create<AuthState>()(
             displayName:
               (data.user.user_metadata?.display_name as string | undefined) ??
               data.user.email.split("@")[0],
-            isAllowed: allowed,
           },
-          error: allowed ? null : privateMessage,
+          error: null,
         });
-        return allowed;
-      },
-      checkAllowedEmail: async (email) => {
-        try {
-          return await allowedByServer(email);
-        } catch {
-          return false;
-        }
+        return true;
       },
       login: async (email, password) => {
         set({ loading: true, error: null });
-
-        const allowed = await get().checkAllowedEmail(email);
-        if (!allowed) {
-          set({ loading: false, error: privateMessage, user: null });
-          return false;
-        }
 
         if (!isSupabaseConfigured()) {
           set({
@@ -118,19 +91,12 @@ export const useAuthStore = create<AuthState>()(
             displayName:
               (data.user.user_metadata?.display_name as string | undefined) ??
               email.split("@")[0],
-            isAllowed: true,
           },
         });
         return true;
       },
       register: async (displayName, email, password) => {
         set({ loading: true, error: null });
-
-        const allowed = await get().checkAllowedEmail(email);
-        if (!allowed) {
-          set({ loading: false, error: privateMessage, user: null });
-          return false;
-        }
 
         if (!isSupabaseConfigured()) {
           set({
@@ -159,7 +125,6 @@ export const useAuthStore = create<AuthState>()(
             id: data.user.id,
             email: data.user.email ?? email,
             displayName,
-            isAllowed: true,
           },
         });
         return true;

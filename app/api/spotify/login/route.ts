@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSpotifyAuthorizationUrl } from "@/lib/spotify/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { PRIVATE_APP_MESSAGE } from "@/lib/auth/allowedUsers";
 
 function getAppUrl(request: Request) {
   const requestOrigin = new URL(request.url).origin;
@@ -23,10 +22,9 @@ function getAppUrl(request: Request) {
 
 export async function GET(request: Request) {
   const appUrl = getAppUrl(request);
-  const { user, allowed } = await getCurrentUser();
+  const { user } = await getCurrentUser();
 
   if (!user) return NextResponse.redirect(new URL("/login", appUrl));
-  if (!allowed) return NextResponse.redirect(new URL("/private", appUrl));
 
   try {
     const state = randomBytes(24).toString("hex");
@@ -41,6 +39,6 @@ export async function GET(request: Request) {
 
     return NextResponse.redirect(getSpotifyAuthorizationUrl(state));
   } catch {
-    return NextResponse.json({ error: PRIVATE_APP_MESSAGE }, { status: 500 });
+    return NextResponse.json({ error: "Spotify login unavailable." }, { status: 500 });
   }
 }

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { toggleLikedSong } from "@/lib/library/server";
 import type { Song } from "@/lib/types";
 
 export async function POST(request: Request) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   try {

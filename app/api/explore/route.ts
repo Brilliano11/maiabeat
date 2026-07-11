@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { moodItems } from "@/lib/catalog";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 
 export async function GET() {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   return NextResponse.json({

@@ -35,8 +35,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/profile?spotify=state_error", appUrl));
   }
 
-  const { user, allowed } = await getCurrentUser();
-  if (!user || !allowed) return NextResponse.redirect(new URL("/private", appUrl));
+  const { user } = await getCurrentUser();
+  if (!user) return NextResponse.redirect(new URL("/login", appUrl));
 
   const admin = createSupabaseAdminClient();
   if (!admin) return NextResponse.redirect(new URL("/profile?spotify=supabase_error", appUrl));

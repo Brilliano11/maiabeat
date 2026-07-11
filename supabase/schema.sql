@@ -1,13 +1,5 @@
 create extension if not exists "pgcrypto";
 
-create table if not exists public.allowed_users (
-  id uuid primary key default gen_random_uuid(),
-  email text not null unique,
-  role text not null default 'partner' check (role in ('owner', 'partner')),
-  display_name text,
-  created_at timestamptz not null default now()
-);
-
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null unique,
@@ -110,7 +102,6 @@ create table if not exists public.player_states (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_allowed_users_email on public.allowed_users(lower(email));
 create index if not exists idx_songs_spotify_track_id on public.songs(spotify_track_id);
 create index if not exists idx_liked_songs_user_id on public.liked_songs(user_id);
 create index if not exists idx_playlists_owner_id on public.playlists(owner_id);
@@ -118,7 +109,6 @@ create index if not exists idx_playlist_songs_playlist_id on public.playlist_son
 create index if not exists idx_queue_items_user_id on public.queue_items(user_id);
 create index if not exists idx_recently_played_user_id on public.recently_played(user_id);
 
-alter table public.allowed_users enable row level security;
 alter table public.profiles enable row level security;
 alter table public.spotify_connections enable row level security;
 alter table public.songs enable row level security;
@@ -129,16 +119,8 @@ alter table public.queue_items enable row level security;
 alter table public.recently_played enable row level security;
 alter table public.player_states enable row level security;
 
-create policy "allowed_users_read_self_email" on public.allowed_users
-for select using (lower(email) = lower((select auth.jwt() ->> 'email')));
-
-create policy "profiles_read_allowed" on public.profiles
-for select using (
-  exists (
-    select 1 from public.allowed_users au
-    where lower(au.email) = lower((select auth.jwt() ->> 'email'))
-  )
-);
+create policy "profiles_read_authenticated" on public.profiles
+for select using (auth.uid() is not null);
 
 create policy "profiles_update_self" on public.profiles
 for update using (auth.uid() = id)
@@ -240,28 +222,18 @@ returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
-declare
-  allowed_row public.allowed_users%rowtype;
 begin
-  select * into allowed_row
-  from public.allowed_users
-  where lower(email) = lower(new.email)
-  limit 1;
-
-  if allowed_row.email is not null then
-    insert into public.profiles (id, email, display_name, role)
-    values (
-      new.id,
-      new.email,
-      coalesce(new.raw_user_meta_data ->> 'display_name', allowed_row.display_name, split_part(new.email, '@', 1)),
-      allowed_row.role
-    )
-    on conflict (id) do update set
-      email = excluded.email,
-      display_name = excluded.display_name,
-      role = excluded.role,
-      updated_at = now();
-  end if;
+  insert into public.profiles (id, email, display_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1)),
+    'partner'
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    display_name = excluded.display_name,
+    updated_at = now();
 
   return new;
 end;
@@ -271,8 +243,3 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
-
--- Seed invited emails after creating the schema:
--- insert into public.allowed_users (email, role, display_name)
--- values ('anggitaramo@gmail.com', 'owner', 'Anggita')
--- on conflict (email) do update set role = excluded.role, display_name = excluded.display_name;

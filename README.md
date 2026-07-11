@@ -1,6 +1,6 @@
 # Maiabeat
 
-Maiabeat is an invite-only, mobile-first music PWA with a neo brutalism UI. It uses Supabase for auth/data and Spotify Web API + Spotify Web Playback SDK for search and full-track playback.
+Maiabeat is a mobile-first music PWA with a neo brutalism UI. It uses Supabase for auth/data and Spotify Web API + Spotify Web Playback SDK for search and full-track playback.
 
 ## Stack
 
@@ -34,16 +34,7 @@ http://127.0.0.1:3002
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
 4. Run `supabase/schema.sql` in the Supabase SQL editor.
-5. Add invited users:
-
-```sql
-insert into public.allowed_users (email, role, display_name)
-values
-  ('anggitaramo@gmail.com', 'owner', 'Anggita'),
-  ('friend@example.com', 'partner', 'Friend');
-```
-
-Maiabeat is not public-open. Any email not present in `allowed_users` will be rejected with an invite-only message.
+5. In Supabase Auth settings, decide whether new users must confirm email before logging in.
 
 ## Spotify Setup
 
@@ -108,7 +99,7 @@ Deploy to Vercel, add all environment variables, then add the Vercel callback UR
 ## Known Limitations
 
 - Full playback requires Spotify Premium.
-- Each invited person should connect their own Spotify account.
+- Each person should connect their own Spotify account.
 - The app does not download, store, rip, or cache Spotify audio.
 - Offline mode only caches static UI assets, not songs.
 - Spotify Development Mode may require manually adding test users in the Spotify dashboard.

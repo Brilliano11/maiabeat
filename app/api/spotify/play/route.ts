@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { formatSpotifyPlaybackError, spotifyFetchForUser } from "@/lib/spotify/server";
 
 export async function PUT(request: Request) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   const { device_id, spotifyUri, positionMs } = (await request.json()) as {

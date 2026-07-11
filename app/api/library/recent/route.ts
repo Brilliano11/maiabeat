@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import {
   addRecentlyPlayedForUser,
   clearRecentlyPlayedForUser,
@@ -7,7 +7,7 @@ import {
 import type { Song } from "@/lib/types";
 
 export async function POST(request: Request) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   try {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
 
   try {

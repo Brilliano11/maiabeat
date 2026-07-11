@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { moodBySlug, moodQuery } from "@/lib/catalog";
-import { requireAllowedUser } from "@/lib/auth/routeGuard";
+import { requireUser } from "@/lib/auth/routeGuard";
 import { searchSpotifyCatalogForUser } from "@/lib/spotify/server";
 
 export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
-  const guard = await requireAllowedUser();
+  const guard = await requireUser();
   if (guard.response) return guard.response;
   const { slug } = await context.params;
   const mood = moodBySlug(slug) ?? {
