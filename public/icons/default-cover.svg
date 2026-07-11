@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="56" fill="#FFF7D6"/>
+  <rect x="24" y="24" width="464" height="464" rx="48" fill="#FFFFFF" stroke="#111111" stroke-width="18"/>
+  <circle cx="256" cy="256" r="126" fill="#FF4D00" stroke="#111111" stroke-width="18"/>
+  <circle cx="256" cy="256" r="34" fill="#FFD600" stroke="#111111" stroke-width="14"/>
+  <text x="256" y="452" text-anchor="middle" font-family="Arial, sans-serif" font-size="54" font-weight="900" fill="#111111">MAIA</text>
+</svg>

@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Maiabeat
 
-## Getting Started
+Maiabeat is an invite-only, mobile-first music PWA with a neo brutalism UI. It uses Supabase for auth/data and Spotify Web API + Spotify Web Playback SDK for search and full-track playback.
 
-First, run the development server:
+## Stack
+
+- Next.js App Router + TypeScript
+- Tailwind CSS
+- Supabase Auth + PostgreSQL
+- Spotify OAuth, Web API, and Web Playback SDK
+- Zustand state
+- PWA manifest + static asset service worker
+
+## Local Setup
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```txt
+http://127.0.0.1:3002
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Supabase Setup
 
-## Learn More
+1. Create a Supabase project.
+2. Copy `.env.example` to `.env.local`.
+3. Fill:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Run `supabase/schema.sql` in the Supabase SQL editor.
+5. Add invited users:
 
-To learn more about Next.js, take a look at the following resources:
+```sql
+insert into public.allowed_users (email, role, display_name)
+values
+  ('anggitaramo@gmail.com', 'owner', 'Anggita'),
+  ('friend@example.com', 'partner', 'Friend');
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Maiabeat is not public-open. Any email not present in `allowed_users` will be rejected with an invite-only message.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Spotify Setup
 
-## Deploy on Vercel
+Create a Spotify Developer App and enable:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```txt
+Web API
+Web Playback SDK
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Add this local Redirect URI exactly:
+
+```txt
+http://127.0.0.1:3002/api/spotify/callback
+```
+
+When deploying to Vercel, also add:
+
+```txt
+https://NAMA-PROJECT.vercel.app/api/spotify/callback
+```
+
+Set the same value in `SPOTIFY_REDIRECT_URI`.
+
+Required scopes:
+
+```txt
+streaming
+user-read-email
+user-read-private
+user-read-playback-state
+user-modify-playback-state
+user-read-currently-playing
+playlist-read-private
+playlist-read-collaborative
+playlist-modify-private
+playlist-modify-public
+user-library-read
+user-library-modify
+```
+
+## Spotify Limits
+
+Full playback requires Spotify Premium. Spotify Development Mode can limit how many Spotify users can authenticate with the app. For wider usage, request Extended Quota Mode in the Spotify Developer Dashboard.
+
+## Environment Notes
+
+Never expose these in client code:
+
+```txt
+SPOTIFY_CLIENT_SECRET
+SUPABASE_SERVICE_ROLE_KEY
+Spotify refresh_token
+```
+
+Maiabeat stores Spotify refresh tokens only in Supabase through server routes.
+
+## Deployment
+
+Deploy to Vercel, add all environment variables, then add the Vercel callback URL to the Spotify Developer Dashboard.
+
+## Known Limitations
+
+- Full playback requires Spotify Premium.
+- Each invited person should connect their own Spotify account.
+- The app does not download, store, rip, or cache Spotify audio.
+- Offline mode only caches static UI assets, not songs.
+- Spotify Development Mode may require manually adding test users in the Spotify dashboard.
