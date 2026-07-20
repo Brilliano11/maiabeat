@@ -30,7 +30,7 @@ export function BrutalButton({
     <button
       type={type}
       className={cn(
-        "inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-[14px] border-[3px] border-black px-4 py-2 text-sm font-black uppercase shadow-[4px_4px_0_#000] transition active:translate-x-1 active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-60",
+        "brutal-button inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-[14px] border-[3px] border-black px-4 py-2 text-sm font-black uppercase shadow-[4px_4px_0_#000] transition active:translate-x-1 active:translate-y-1 active:shadow-none disabled:cursor-not-allowed disabled:opacity-60",
         tones[tone],
         className,
       )}

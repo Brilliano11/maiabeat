@@ -21,6 +21,7 @@ import {
   Plus,
   Search,
   Settings,
+  Trees,
   UserRound,
 } from "lucide-react";
 import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
@@ -93,7 +94,7 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
 
   return (
     <aside className="desktop-sidebar">
-      <Link href="/home" className="mb-8 flex min-h-12 items-center gap-3 rounded-2xl border-[3px] border-black bg-[#FF4D00] px-3 text-white shadow-[5px_5px_0_#000]">
+      <Link href="/home" className="sidebar-brand mb-8 flex min-h-12 items-center gap-3 rounded-2xl border-[3px] border-black bg-[#FF4D00] px-3 text-white shadow-[5px_5px_0_#000]">
         <Music2 size={24} strokeWidth={3} />
         <span className="text-xl font-black">Maiabeat</span>
       </Link>
@@ -105,6 +106,7 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
             <Link
               key={href}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-11 items-center gap-3 rounded-2xl border-[3px] border-black px-3 text-sm font-black uppercase transition active:translate-x-1 active:translate-y-1",
                 active ? "bg-[#FFD600] shadow-[4px_4px_0_#000]" : "bg-white",
@@ -191,6 +193,10 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
           <Settings size={18} />
         </Link>
       </div>
+      <div className="maria-theme-badge" aria-hidden="true">
+        <Trees className="maria-theme-tree" size={17} />
+        <span>Maria Forest</span>
+      </div>
     </aside>
   );
 }
@@ -246,6 +252,11 @@ export function AppShell({
   const showNowPlayingBar = !pathname.startsWith("/player");
   const openQueue = useCallback(() => setQueueOpen(true), []);
   const closeQueue = useCallback(() => setQueueOpen(false), []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("maiabeat-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!user) {

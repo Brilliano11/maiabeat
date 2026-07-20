@@ -663,6 +663,41 @@ test("important private API routes return JSON instead of 404 HTML", async ({ re
   }
 });
 
+test("Maria Forest theme persists and keeps responsive navigation fixed", async ({ page }) => {
+  await page.goto("/preview");
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/settings");
+
+  const mariaTheme = page.getByRole("radio", { name: "Maria Forest" });
+  await mariaTheme.click();
+  await expect(mariaTheme).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "maria");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "maria");
+  await expect(page.locator(".app-shell")).toHaveClass(/theme-maria/);
+  await expect(page.locator(".app-shell")).toHaveCSS("font-family", /Playfair Display/);
+  await expect(page.locator(".sidebar-brand")).toHaveCSS(
+    "background-color",
+    "rgb(123, 46, 58)",
+  );
+  await expect(page.locator(".app-shell")).toHaveCSS("--yellow", "#68000c");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".bottom-navigation-item")).toHaveCount(4);
+  await expect(page.locator(".bottom-navigation-shell")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("display", "none");
+
+  const mobileOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(mobileOverflow).toBe(false);
+
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await expect(page.locator(".desktop-sidebar")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".bottom-navigation-shell")).toHaveCSS("display", "none");
+});
+
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },

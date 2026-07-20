@@ -69,7 +69,7 @@ export default function GenrePage() {
           {error ? <BrutalCard className="bg-[#FF3B6B] font-black text-white">{error}</BrutalCard> : null}
           {data ? (
             <>
-              <header className="rounded-[2rem] border-[3px] border-black p-5 shadow-[6px_6px_0_#000]" style={{ backgroundColor: data.genre.color }}>
+              <header className="collection-hero genre-hero rounded-[2rem] border-[3px] border-black p-5 shadow-[6px_6px_0_#000]" style={{ backgroundColor: data.genre.color }}>
                 <p className="page-kicker">Genre and Mood</p>
                 <h1 className="page-title">{data.genre.name}</h1>
                 <p className="mt-3 max-w-2xl font-bold">{data.genre.description}</p>

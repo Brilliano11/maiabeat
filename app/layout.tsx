@@ -1,8 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { SpotifyPlayerProvider } from "@/components/music/SpotifyPlayerProvider";
 import "./globals.css";
+
+const themeBootstrapScript = `
+  (function () {
+    try {
+      var theme = localStorage.getItem("maiabeat-theme");
+      if (!theme) {
+        var persisted = JSON.parse(localStorage.getItem("maiabeat-library") || "{}");
+        theme = persisted && persisted.state && persisted.state.theme;
+      }
+      if (theme !== "sunny" && theme !== "night" && theme !== "maria") theme = "sunny";
+      document.documentElement.dataset.theme = theme;
+    } catch (_) {
+      document.documentElement.dataset.theme = "sunny";
+    }
+  })();
+`;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,6 +28,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const mariaDisplay = Playfair_Display({
+  variable: "--font-maria-display",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -41,8 +63,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      data-theme="sunny"
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} ${mariaDisplay.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       <body className="min-h-full bg-[#111]">
         <SpotifyPlayerProvider>{children}</SpotifyPlayerProvider>
         <ServiceWorkerRegister />

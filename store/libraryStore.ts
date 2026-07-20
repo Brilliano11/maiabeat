@@ -6,12 +6,14 @@ import { makeId, notify } from "@/lib/utils";
 import type { Playlist, PlaylistUpdate, Song } from "@/lib/types";
 import { useAuthStore } from "@/store/authStore";
 
+export type AppTheme = "sunny" | "night" | "maria";
+
 type LibraryState = {
   likedSongs: Song[];
   playlists: Playlist[];
   savedSongs: Record<string, Song>;
   recentlyPlayed: Song[];
-  theme: "sunny" | "night";
+  theme: AppTheme;
   likeSong: (song: Song) => void;
   unlikeSong: (songId: string) => void;
   toggleLike: (song: Song) => void;
@@ -38,6 +40,7 @@ type LibraryState = {
     queue?: unknown[];
   } | null>;
   clearAll: () => void;
+  setTheme: (theme: AppTheme) => void;
   toggleTheme: () => void;
 };
 
@@ -303,8 +306,11 @@ export const useLibraryStore = create<LibraryState>()(
           savedSongs: {},
           recentlyPlayed: [],
         }),
+      setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
-        set((state) => ({ theme: state.theme === "sunny" ? "night" : "sunny" })),
+        set((state) => ({
+          theme: state.theme === "sunny" ? "night" : state.theme === "night" ? "maria" : "sunny",
+        })),
     }),
     { name: "maiabeat-library" },
   ),

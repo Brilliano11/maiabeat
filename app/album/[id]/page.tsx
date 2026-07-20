@@ -62,7 +62,7 @@ export default function AlbumPage() {
           {error ? <BrutalCard className="bg-[#FF3B6B] font-black text-white">{error}</BrutalCard> : null}
           {data ? (
             <>
-              <header className="grid gap-5 rounded-[2rem] border-[3px] border-black bg-[#FFD600] p-5 shadow-[6px_6px_0_#000] md:grid-cols-[170px_minmax(0,1fr)] md:items-end">
+              <header className="collection-hero album-hero grid gap-5 rounded-[2rem] border-[3px] border-black bg-[#FFD600] p-5 shadow-[6px_6px_0_#000] md:grid-cols-[170px_minmax(0,1fr)] md:items-end">
                 <Image
                   src={data.album.coverUrl || "/icons/default-cover.svg"}
                   alt=""

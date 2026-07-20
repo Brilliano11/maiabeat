@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Disc3, Home, Library, Search, UserRound } from "lucide-react";
+import { Disc3, Home, Library, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -10,7 +10,6 @@ const items = [
   { href: "/search", label: "Search", Icon: Search },
   { href: "/player", label: "Player", Icon: Disc3 },
   { href: "/library", label: "Library", Icon: Library },
-  { href: "/profile", label: "Profile", Icon: UserRound },
 ];
 
 export function BottomNavigation() {

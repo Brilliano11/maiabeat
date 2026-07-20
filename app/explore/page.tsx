@@ -55,7 +55,8 @@ export default function ExplorePage() {
               {sections.map((section, index) => (
                 <Link key={section} href={`/search?q=${encodeURIComponent(section)}`}>
                   <BrutalCard
-                    className="grid min-h-28 place-items-center text-center"
+                    className="discovery-tile grid min-h-28 place-items-center text-center"
+                    data-tone={index % 5}
                     style={{ backgroundColor: moodItems[index % moodItems.length]?.color ?? "#FFFFFF" }}
                   >
                     <p className="card-title">{section}</p>

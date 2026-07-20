@@ -18,7 +18,7 @@ export default function LikedPage() {
     <AuthGuard>
       <AppShell>
         <div className="page-stack">
-          <header className="rounded-[2rem] border-[3px] border-black bg-[#FF3B6B] p-5 text-white shadow-[6px_6px_0_#000] lg:p-7">
+          <header className="collection-hero liked-hero rounded-[2rem] border-[3px] border-black bg-[#FF3B6B] p-5 text-white shadow-[6px_6px_0_#000] lg:p-7">
             <Heart size={34} />
             <h1 className="page-title mt-5">Liked Songs</h1>
             <p className="font-bold">{likedSongs.length} songs you saved</p>

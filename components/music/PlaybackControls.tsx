@@ -27,8 +27,8 @@ export function PlaybackControls() {
   const toggleMute = usePlayerStore((state) => state.toggleMute);
 
   return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-5 items-center gap-2">
+    <div className="playback-controls grid gap-3">
+      <div className="playback-controls-main grid grid-cols-5 items-center gap-2">
         <button
           aria-label="Toggle shuffle"
           onClick={toggleShuffle}
@@ -66,7 +66,7 @@ export function PlaybackControls() {
           <span className="text-[10px] font-black">{repeat}</span>
         </button>
       </div>
-      <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-3 rounded-2xl border-[3px] border-black bg-white p-2">
+      <div className="playback-volume grid grid-cols-[48px_minmax(0,1fr)] items-center gap-3 rounded-2xl border-[3px] border-black bg-white p-2">
         <button
           aria-label={isMuted ? "Unmute" : "Mute"}
           onClick={() => void toggleMute()}

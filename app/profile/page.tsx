@@ -48,7 +48,7 @@ function ProfileContent() {
     <AuthGuard>
       <AppShell>
         <div className="page-stack">
-          <header className="grid gap-4 rounded-[2rem] border-[3px] border-black bg-[#FF4D00] p-5 text-white shadow-[6px_6px_0_#000] md:grid-cols-[auto_minmax(0,1fr)] md:items-center lg:p-7">
+          <header className="collection-hero profile-hero grid gap-4 rounded-[2rem] border-[3px] border-black bg-[#FF4D00] p-5 text-white shadow-[6px_6px_0_#000] md:grid-cols-[auto_minmax(0,1fr)] md:items-center lg:p-7">
             <Music2 size={40} />
             <div className="min-w-0">
               <h1 className="text-ellipsis page-title">{user?.displayName ?? "Maiabeat"}</h1>

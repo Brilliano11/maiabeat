@@ -119,7 +119,7 @@ export default function HomePage() {
     <AuthGuard>
       <AppShell>
         <div className="page-stack">
-          <header className="rounded-[2rem] border-[3px] border-black bg-[#FF4D00] p-5 text-white shadow-[6px_6px_0_#000] lg:p-7">
+          <header className="home-hero rounded-[2rem] border-[3px] border-black bg-[#FF4D00] p-5 text-white shadow-[6px_6px_0_#000] lg:p-7">
             <p className="page-kicker">{homeData?.greeting ?? "Good evening"}, {name}</p>
             <h1 className="page-title mt-2">Maiabeat hits different.</h1>
           </header>
@@ -215,7 +215,11 @@ export default function HomePage() {
                 const Icon = [Heart, Library, ListMusic, Disc3, Headphones, Search][index % 6];
                 return (
                   <Link key={item.title} href={item.route}>
-                    <BrutalCard className="grid min-h-28 place-items-start bg-white" style={{ backgroundColor: item.color }}>
+                    <BrutalCard
+                      className="quick-access-tile grid min-h-28 place-items-start bg-white"
+                      data-tone={index % 5}
+                      style={{ backgroundColor: item.color }}
+                    >
                       <Icon size={22} />
                       <p className="card-title mt-3">{item.title}</p>
                     </BrutalCard>
