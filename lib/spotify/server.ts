@@ -107,6 +107,7 @@ type SpotifySearchOptions = {
 };
 
 let clientCredentialsToken: { accessToken: string; expiresAt: number } | null = null;
+const userTokenRefreshPromises = new Map<string, Promise<{ accessToken: string; expiresAt: string }>>();
 
 function requireSpotifyEnv() {
   const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -122,6 +123,15 @@ function requireSpotifyEnv() {
 
 function tokenAuthHeader(clientId: string, clientSecret: string) {
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+}
+
+function parseSpotifyJson<T>(text: string, fallback: string): T | null {
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(fallback);
+  }
 }
 
 export function getSpotifyAuthorizationUrl(state: string) {
@@ -165,7 +175,7 @@ export async function fetchSpotifyProfile(accessToken: string) {
   return (await response.json()) as SpotifyProfile;
 }
 
-export async function refreshSpotifyToken(userId: string) {
+async function refreshSpotifyTokenUncached(userId: string) {
   const admin = createSupabaseAdminClient();
   if (!admin) throw new Error("Supabase admin is not configured.");
 
@@ -219,6 +229,17 @@ export async function refreshSpotifyToken(userId: string) {
   if (updateError) throw new Error("Could not save refreshed Spotify token.");
 
   return { accessToken: token.access_token, expiresAt: nextExpiresAt };
+}
+
+export async function refreshSpotifyToken(userId: string) {
+  const existing = userTokenRefreshPromises.get(userId);
+  if (existing) return existing;
+
+  const promise = refreshSpotifyTokenUncached(userId).finally(() => {
+    userTokenRefreshPromises.delete(userId);
+  });
+  userTokenRefreshPromises.set(userId, promise);
+  return promise;
 }
 
 export async function getFreshSpotifyAccessToken(userId: string) {
@@ -311,7 +332,7 @@ export async function upsertSong(song: Song) {
     .select("id")
     .single();
 
-  if (error) return song;
+  if (error) throw error;
   return { ...song, id: data.id as string };
 }
 
@@ -341,7 +362,10 @@ async function getClientCredentialsAccessToken() {
   });
 
   const text = await response.text();
-  const body = text ? JSON.parse(text) as SpotifyTokenResponse & { error_description?: string } : null;
+  const body = parseSpotifyJson<SpotifyTokenResponse & { error_description?: string }>(
+    text,
+    "Spotify token response was not valid JSON.",
+  );
 
   if (!response.ok || !body?.access_token) {
     throw new Error(body?.error_description ?? "Spotify app search token failed.");
@@ -355,7 +379,9 @@ async function getClientCredentialsAccessToken() {
   return clientCredentialsToken.accessToken;
 }
 
-export async function spotifyFetchWithClientCredentials(path: string, init: RequestInit = {}) {
+// Spotify endpoints return many shapes; route handlers narrow the payload they use.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function spotifyFetchWithClientCredentials(path: string, init: RequestInit = {}): Promise<any> {
   const accessToken = await getClientCredentialsAccessToken();
   const response = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
@@ -368,7 +394,10 @@ export async function spotifyFetchWithClientCredentials(path: string, init: Requ
   });
 
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
+  const body = parseSpotifyJson<{
+    error?: { message?: string };
+    error_description?: string;
+  }>(text, "Spotify catalog response was not valid JSON.");
 
   if (!response.ok) {
     const message =
@@ -425,7 +454,14 @@ async function spotifySearchRequest(
     cache: "no-store",
   });
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
+  const body = parseSpotifyJson<{
+    error?: { message?: string };
+    error_description?: string;
+    tracks?: SpotifyPaging<SpotifyTrack>;
+    artists?: SpotifyPaging<SpotifyArtist>;
+    albums?: SpotifyPaging<SpotifyAlbum>;
+    playlists?: SpotifyPaging<SpotifyPlaylist | null>;
+  }>(text, "Spotify search response was not valid JSON.");
 
   if (!response.ok) {
     const message =
@@ -435,12 +471,7 @@ async function spotifySearchRequest(
     throw new Error(message);
   }
 
-  return body as {
-    tracks?: SpotifyPaging<SpotifyTrack>;
-    artists?: SpotifyPaging<SpotifyArtist>;
-    albums?: SpotifyPaging<SpotifyAlbum>;
-    playlists?: SpotifyPaging<SpotifyPlaylist | null>;
-  };
+  return body ?? {};
 }
 
 function paginationFromPaging<T>(
@@ -523,11 +554,13 @@ export async function searchSpotifyCatalogWithClientCredentials(
   return searchSpotifyCatalogWithToken(query, accessToken, options);
 }
 
+// Spotify endpoints return many shapes; route handlers narrow the payload they use.
 export async function spotifyFetchForUser(
   userId: string,
   path: string,
   init: RequestInit = {},
-) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
   const { accessToken } = await getFreshSpotifyAccessToken(userId);
   const response = await fetch(`https://api.spotify.com/v1${path}`, {
     ...init,
@@ -542,7 +575,10 @@ export async function spotifyFetchForUser(
   if (response.status === 204) return null;
 
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
+  const body = parseSpotifyJson<{
+    error?: { message?: string };
+    error_description?: string;
+  }>(text, "Spotify playback response was not valid JSON.");
 
   if (!response.ok) {
     const message =

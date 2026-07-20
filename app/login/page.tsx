@@ -7,14 +7,15 @@ import { LogIn } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { BrutalButton } from "@/components/BrutalButton";
 import { BrutalCard } from "@/components/BrutalCard";
+import { getSafeInternalPath } from "@/lib/security/safeNavigation";
 import { useAuthStore } from "@/store/authStore";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/home";
-  const [email, setEmail] = useState("anggitaramo@gmail.com");
-  const [password, setPassword] = useState("maia123");
+  const nextPath = getSafeInternalPath(searchParams.get("next"));
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const login = useAuthStore((state) => state.login);
   const loading = useAuthStore((state) => state.loading);
   const error = useAuthStore((state) => state.error);

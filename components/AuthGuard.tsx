@@ -7,9 +7,11 @@ import { useAuthStore } from "@/store/authStore";
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const hydrated = useAuthStore((state) => state.hydrated);
   const restoreSession = useAuthStore((state) => state.restoreSession);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (user) return;
     let cancelled = false;
     restoreSession().then((restored) => {
@@ -18,8 +20,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [restoreSession, router, user]);
+  }, [hydrated, restoreSession, router, user]);
 
-  if (!user) return null;
+  if (!hydrated || !user) return null;
   return <>{children}</>;
 }

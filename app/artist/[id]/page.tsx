@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -72,8 +73,14 @@ export default function ArtistPage() {
           {data ? (
             <>
               <header className="grid gap-5 rounded-[2rem] border-[3px] border-black bg-[#29FF87] p-5 shadow-[6px_6px_0_#000] md:grid-cols-[160px_minmax(0,1fr)] md:items-end">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.artist.imageUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-36 rounded-3xl border-[3px] border-black object-cover md:w-40" />
+                <Image
+                  src={data.artist.imageUrl || "/icons/default-cover.svg"}
+                  alt=""
+                  width={160}
+                  height={160}
+                  sizes="(min-width: 768px) 160px, 144px"
+                  className="aspect-square w-36 rounded-3xl border-[3px] border-black object-cover md:w-40"
+                />
                 <div className="min-w-0">
                   <p className="page-kicker">Verified Artist</p>
                   <h1 className="page-title text-ellipsis">{data.artist.name}</h1>
@@ -107,8 +114,14 @@ export default function ArtistPage() {
                   {data.albums.map((album) => (
                     <Link key={album.id} href={`/album/${album.id}`}>
                       <BrutalCard className="grid gap-3 bg-white">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={album.coverUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover" />
+                        <Image
+                          src={album.coverUrl || "/icons/default-cover.svg"}
+                          alt=""
+                          width={320}
+                          height={320}
+                          sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+                          className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover"
+                        />
                         <p className="text-ellipsis card-title">{album.title}</p>
                         <p className="text-xs font-bold text-black/70">{album.releaseDate ?? album.albumType}</p>
                       </BrutalCard>

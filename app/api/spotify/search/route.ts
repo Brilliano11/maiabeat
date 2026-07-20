@@ -22,7 +22,9 @@ function safeSearchType(type: string | null): SpotifySearchType {
 }
 
 export async function GET(request: Request) {
-  const guard = await requireUser();
+  const guard = await requireUser({
+    rateLimit: { namespace: "spotify-search", limit: 45, windowMs: 60_000 },
+  });
   if (guard.response) return guard.response;
 
   const { searchParams } = new URL(request.url);

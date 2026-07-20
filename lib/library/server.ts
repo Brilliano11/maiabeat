@@ -1,6 +1,13 @@
 import "server-only";
 
-import type { Playlist, QueueItem, Song } from "@/lib/types";
+import type {
+  PlayerSnapshot,
+  Playlist,
+  PlaylistUpdate,
+  QueueItem,
+  RepeatMode,
+  Song,
+} from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertSong } from "@/lib/spotify/server";
 
@@ -80,11 +87,47 @@ function requireAdmin() {
   return admin;
 }
 
+async function nextPlaylistSongPosition(playlistId: string) {
+  const admin = requireAdmin();
+  const { data, error } = await admin
+    .from("playlist_songs")
+    .select("position")
+    .eq("playlist_id", playlistId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const position = typeof data?.position === "number" ? data.position : -1;
+  return position + 1;
+}
+
+async function nextQueuePosition(userId: string) {
+  const admin = requireAdmin();
+  const { data, error } = await admin
+    .from("queue_items")
+    .select("position")
+    .eq("user_id", userId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const position = typeof data?.position === "number" ? data.position : -1;
+  return position + 1;
+}
+
 export async function getLibrarySnapshot(userId: string) {
   const admin = requireAdmin();
 
-  const [likedResult, playlistsResult, playlistSongsResult, recentResult, queueResult] =
-    await Promise.all([
+  const [
+    likedResult,
+    playlistsResult,
+    playlistSongsResult,
+    recentResult,
+    queueResult,
+    playerStateResult,
+  ] = await Promise.all([
       admin
         .from("liked_songs")
         .select("song:songs(*)")
@@ -97,7 +140,7 @@ export async function getLibrarySnapshot(userId: string) {
         .order("created_at", { ascending: false }),
       admin
         .from("playlist_songs")
-        .select("playlist_id,song_id")
+        .select("playlist_id,song_id,song:songs(*)")
         .order("position", { ascending: true }),
       admin
         .from("recently_played")
@@ -110,6 +153,13 @@ export async function getLibrarySnapshot(userId: string) {
         .select("id,position,song:songs(*)")
         .eq("user_id", userId)
         .order("position", { ascending: true }),
+      admin
+        .from("player_states")
+        .select(
+          "current_index,is_playing,progress_ms,shuffle_enabled,repeat_mode,current_song:songs(*)",
+        )
+        .eq("user_id", userId)
+        .maybeSingle(),
     ]);
 
   if (likedResult.error) throw likedResult.error;
@@ -117,12 +167,16 @@ export async function getLibrarySnapshot(userId: string) {
   if (playlistSongsResult.error) throw playlistSongsResult.error;
   if (recentResult.error) throw recentResult.error;
   if (queueResult.error) throw queueResult.error;
+  if (playerStateResult.error) throw playerStateResult.error;
 
   const playlistSongMap = new Map<string, string[]>();
+  const playlistSongs: Song[] = [];
   (playlistSongsResult.data ?? []).forEach((item) => {
     const ids = playlistSongMap.get(item.playlist_id) ?? [];
     ids.push(item.song_id);
     playlistSongMap.set(item.playlist_id, ids);
+    const song = item.song as unknown as SongRow | null;
+    if (song) playlistSongs.push(songFromRow(song));
   });
 
   const likedSongs = (likedResult.data ?? [])
@@ -135,12 +189,38 @@ export async function getLibrarySnapshot(userId: string) {
       .filter(Boolean)
       .map((song) => songFromRow(song!));
 
+  const rawPlayerState = playerStateResult.data as
+    | {
+        current_index: number | null;
+        is_playing: boolean | null;
+        progress_ms: number | null;
+        shuffle_enabled: boolean | null;
+        repeat_mode: RepeatMode | null;
+        current_song: SongRow | SongRow[] | null;
+      }
+    | null;
+  const currentSongRow = Array.isArray(rawPlayerState?.current_song)
+    ? rawPlayerState.current_song[0]
+    : rawPlayerState?.current_song;
+  const playerState: PlayerSnapshot | null = rawPlayerState
+    ? {
+        currentSong: currentSongRow ? songFromRow(currentSongRow) : null,
+        currentIndex: rawPlayerState.current_index ?? 0,
+        isPlaying: rawPlayerState.is_playing ?? false,
+        progressMs: rawPlayerState.progress_ms ?? 0,
+        shuffleEnabled: rawPlayerState.shuffle_enabled ?? false,
+        repeatMode: rawPlayerState.repeat_mode ?? "off",
+      }
+    : null;
+
   return {
     likedSongs: uniqueSongs(likedSongs),
     playlists: (playlistsResult.data ?? []).map((playlist) =>
       playlistFromRow(playlist as PlaylistRow, playlistSongMap.get(playlist.id) ?? []),
     ),
     recentlyPlayed: uniqueSongs(recentlyPlayed),
+    playlistSongs: uniqueSongs(playlistSongs),
+    playerState,
     queue: (queueResult.data ?? [])
       .map((item) => {
         const song = item.song as unknown as SongRow | null;
@@ -205,11 +285,23 @@ export async function createPlaylistForUser(
   return playlistFromRow(data as PlaylistRow);
 }
 
-export async function renamePlaylistForUser(userId: string, playlistId: string, name: string) {
+export async function updatePlaylistForUser(
+  userId: string,
+  playlistId: string,
+  input: PlaylistUpdate,
+) {
   const admin = requireAdmin();
+  const update: Record<string, string | null> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (input.name !== undefined) update.name = input.name;
+  if (input.description !== undefined) update.description = input.description || null;
+  if (input.coverUrl !== undefined) update.cover_url = input.coverUrl;
+  if (input.visibility !== undefined) update.visibility = input.visibility;
+
   const { data, error } = await admin
     .from("playlists")
-    .update({ name, updated_at: new Date().toISOString() })
+    .update(update)
     .eq("id", playlistId)
     .eq("owner_id", userId)
     .select("*")
@@ -246,20 +338,23 @@ export async function addSongToPlaylistForUser(
 
   if (playlistError) throw playlistError;
   if (!playlist) throw new Error("Playlist not found.");
-  if (playlist.owner_id !== userId && playlist.visibility !== "shared") {
+  if (playlist.owner_id !== userId) {
     throw new Error("You cannot edit this playlist.");
   }
 
-  const { count, error: countError } = await admin
+  const { data: existing, error: existingError } = await admin
     .from("playlist_songs")
-    .select("id", { count: "exact", head: true })
-    .eq("playlist_id", playlistId);
-  if (countError) throw countError;
+    .select("id")
+    .eq("playlist_id", playlistId)
+    .eq("song_id", savedSong.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return savedSong;
 
   const { error } = await admin.from("playlist_songs").insert({
     playlist_id: playlistId,
     song_id: savedSong.id,
-    position: count ?? 0,
+    position: await nextPlaylistSongPosition(playlistId),
     added_by: userId,
   });
 
@@ -281,7 +376,7 @@ export async function removeSongFromPlaylistForUser(
 
   if (playlistError) throw playlistError;
   if (!playlist) throw new Error("Playlist not found.");
-  if (playlist.owner_id !== userId && playlist.visibility !== "shared") {
+  if (playlist.owner_id !== userId) {
     throw new Error("You cannot edit this playlist.");
   }
 
@@ -293,23 +388,149 @@ export async function removeSongFromPlaylistForUser(
   if (error) throw error;
 }
 
+export async function reorderPlaylistSongsForUser(
+  userId: string,
+  playlistId: string,
+  songIds: string[],
+) {
+  const admin = requireAdmin();
+  const { data: playlist, error: playlistError } = await admin
+    .from("playlists")
+    .select("id,owner_id")
+    .eq("id", playlistId)
+    .maybeSingle();
+
+  if (playlistError) throw playlistError;
+  if (!playlist) throw new Error("Playlist not found.");
+  if (playlist.owner_id !== userId) throw new Error("You cannot edit this playlist.");
+
+  const { data: rows, error: rowsError } = await admin
+    .from("playlist_songs")
+    .select("id,song_id")
+    .eq("playlist_id", playlistId);
+  if (rowsError) throw rowsError;
+
+  const currentIds = new Set((rows ?? []).map((row) => row.song_id as string));
+  const uniqueRequestedIds = new Set(songIds);
+  if (
+    songIds.length !== currentIds.size ||
+    uniqueRequestedIds.size !== songIds.length ||
+    songIds.some((songId) => !currentIds.has(songId))
+  ) {
+    throw new Error("Playlist order does not match its songs.");
+  }
+
+  const rowBySongId = new Map(
+    (rows ?? []).map((row) => [row.song_id as string, row.id as string]),
+  );
+  const temporaryOffset = 100_000;
+  for (const [index, songId] of songIds.entries()) {
+    const { error } = await admin
+      .from("playlist_songs")
+      .update({ position: temporaryOffset + index })
+      .eq("id", rowBySongId.get(songId));
+    if (error) throw error;
+  }
+  for (const [position, songId] of songIds.entries()) {
+    const { error } = await admin
+      .from("playlist_songs")
+      .update({ position })
+      .eq("id", rowBySongId.get(songId));
+    if (error) throw error;
+  }
+
+  return songIds;
+}
+
+type QueuePlayerStateInput = {
+  currentTrackId?: string | null;
+  currentIndex?: number;
+  isPlaying?: boolean;
+  progressMs?: number;
+  shuffleEnabled?: boolean;
+  repeatMode?: RepeatMode;
+};
+
+export async function replaceQueueForUser(
+  userId: string,
+  songs: Song[],
+  state: QueuePlayerStateInput = {},
+) {
+  const admin = requireAdmin();
+  const savedSongs = await Promise.all(songs.map((song) => upsertSong(song)));
+
+  if (savedSongs.some((song) => !song.id)) {
+    throw new Error("Queue song upsert failed.");
+  }
+
+  const requestedIndex = state.currentTrackId
+    ? savedSongs.findIndex((song) => song.spotifyTrackId === state.currentTrackId)
+    : (state.currentIndex ?? 0);
+  const currentIndex = savedSongs.length
+    ? Math.min(Math.max(requestedIndex, 0), savedSongs.length - 1)
+    : 0;
+  const currentSongId = savedSongs[currentIndex]?.id ?? null;
+
+  const { error: deleteError } = await admin
+    .from("queue_items")
+    .delete()
+    .eq("user_id", userId);
+  if (deleteError) throw deleteError;
+
+  let queue: QueueItem[] = [];
+  if (savedSongs.length) {
+    const { data, error } = await admin
+      .from("queue_items")
+      .insert(
+        savedSongs.map((song, position) => ({
+          user_id: userId,
+          song_id: song.id,
+          position,
+          source: "player",
+        })),
+      )
+      .select("id,position");
+    if (error) throw error;
+
+    const rowByPosition = new Map(
+      (data ?? []).map((row) => [row.position as number, row.id as string]),
+    );
+    queue = savedSongs.map((song, position) => ({
+      id: rowByPosition.get(position) ?? `${song.spotifyTrackId}-${position}`,
+      position,
+      song,
+    }));
+  }
+
+  const { error: stateError } = await admin.from("player_states").upsert(
+    {
+      user_id: userId,
+      current_song_id: currentSongId,
+      current_index: currentIndex,
+      is_playing: state.isPlaying ?? false,
+      progress_ms: Math.max(0, Math.round(state.progressMs ?? 0)),
+      shuffle_enabled: state.shuffleEnabled ?? false,
+      repeat_mode: state.repeatMode ?? "off",
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+  if (stateError) throw stateError;
+
+  return { queue, currentIndex };
+}
+
 export async function addQueueItemForUser(userId: string, song: Song) {
   const admin = requireAdmin();
   const savedSong = await upsertSong(song);
   if (!savedSong.id) throw new Error("Song upsert failed.");
-
-  const { count, error: countError } = await admin
-    .from("queue_items")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if (countError) throw countError;
 
   const { data, error } = await admin
     .from("queue_items")
     .insert({
       user_id: userId,
       song_id: savedSong.id,
-      position: count ?? 0,
+      position: await nextQueuePosition(userId),
     })
     .select("id,position")
     .single();

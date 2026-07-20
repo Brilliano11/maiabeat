@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -92,8 +93,14 @@ export default function GenrePage() {
                   {data.playlists.items.map((playlist) => (
                     <Link key={playlist.id} href={`/playlist/${playlist.id}`}>
                       <BrutalCard className="grid gap-3 bg-white">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={playlist.coverUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover" />
+                        <Image
+                          src={playlist.coverUrl || "/icons/default-cover.svg"}
+                          alt=""
+                          width={320}
+                          height={320}
+                          sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+                          className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover"
+                        />
                         <p className="text-ellipsis card-title">{playlist.name}</p>
                       </BrutalCard>
                     </Link>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -7,7 +8,9 @@ import {
   Disc3,
   Loader2,
   MoreHorizontal,
+  RotateCcw,
   Search,
+  SlidersHorizontal,
   Trash2,
   UserRound,
   X,
@@ -32,9 +35,13 @@ import {
   saveRecentSearch,
   type RecentSearchItem,
 } from "@/lib/recentSearches";
+import { searchLocalSongs } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import { usePlayerStore } from "@/store/playerStore";
 
 type Filter = "All" | "Songs" | "Artists" | "Albums" | "Playlists";
+type SortMode = "Relevance" | "Popularity" | "Name";
+type DurationFilter = "Any" | "Short" | "Medium" | "Long";
 
 type SearchPayload = {
   songs: Song[];
@@ -48,7 +55,36 @@ type SearchPayload = {
 };
 
 const filters: Filter[] = ["All", "Songs", "Artists", "Albums", "Playlists"];
+const sortModes: SortMode[] = ["Relevance", "Popularity", "Name"];
+const durationOptions: Array<{ value: DurationFilter; label: string }> = [
+  { value: "Any", label: "Any duration" },
+  { value: "Short", label: "Under 3 min" },
+  { value: "Medium", label: "3-5 min" },
+  { value: "Long", label: "Over 5 min" },
+];
 const quickSearches = ["Hindia", "NIKI", "Avenged Sevenfold", "Indo Hits", "J-Pop", "Lo-Fi"];
+
+function sortSearchResults<T>(
+  items: T[],
+  sortMode: SortMode,
+  getName: (item: T) => string,
+  getPopularity?: (item: T) => number | undefined,
+) {
+  if (sortMode === "Relevance") return items;
+  return [...items].sort((left, right) => {
+    if (sortMode === "Popularity") {
+      return (getPopularity?.(right) ?? 0) - (getPopularity?.(left) ?? 0);
+    }
+    return getName(left).localeCompare(getName(right), undefined, { sensitivity: "base" });
+  });
+}
+
+function matchesDuration(durationMs: number, filter: DurationFilter) {
+  if (filter === "Short") return durationMs < 180_000;
+  if (filter === "Medium") return durationMs >= 180_000 && durationMs <= 300_000;
+  if (filter === "Long") return durationMs > 300_000;
+  return true;
+}
 
 function spotifyTypeForFilter(filter: Filter) {
   if (filter === "Songs") return "track";
@@ -97,10 +133,12 @@ function SearchEntityCard({
   return (
     <BrutalCard className="p-3">
       <div className="song-row">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={imageUrl || "/icons/default-cover.svg"}
           alt=""
+          width={64}
+          height={64}
+          sizes="(min-width: 640px) 64px, 52px"
           className="h-[52px] w-[52px] rounded-xl border-[3px] border-black object-cover sm:h-16 sm:w-16"
         />
         <button onClick={onOpen} className="min-w-0 text-left">
@@ -134,6 +172,10 @@ function SearchContent() {
   const initial = params.get("q") ?? "";
   const [query, setQuery] = useState(initial);
   const [activeFilter, setActiveFilter] = useState<Filter>("All");
+  const [sortMode, setSortMode] = useState<SortMode>("Relevance");
+  const [durationFilter, setDurationFilter] = useState<DurationFilter>("Any");
+  const [hideExplicit, setHideExplicit] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [tracks, setTracks] = useState<Song[]>([]);
   const [artists, setArtists] = useState<ArtistItem[]>([]);
   const [albums, setAlbums] = useState<AlbumItem[]>([]);
@@ -148,9 +190,9 @@ function SearchContent() {
   const abortRef = useRef<AbortController | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const user = useAuthStore((state) => state.user);
   const setQueue = usePlayerStore((state) => state.setQueue);
 
-  const hasResults = tracks.length || artists.length || albums.length || playlists.length;
   const showRecentPanel = focused && !query.trim() && recentSearches.length > 0;
 
   const refreshRecent = useCallback(() => setRecentSearches(getRecentSearches()), []);
@@ -169,6 +211,29 @@ function SearchContent() {
       if (!trimmed) {
         resetResults();
         setError("");
+        return;
+      }
+
+      if (user?.id === "local-preview") {
+        const localSongs = activeFilter === "All" || activeFilter === "Songs"
+          ? searchLocalSongs(trimmed)
+          : [];
+        setTracks(localSongs);
+        setArtists([]);
+        setAlbums([]);
+        setPlaylists([]);
+        setNextOffset(null);
+        setError("");
+        setLoading(false);
+        setLoadingMore(false);
+        saveRecentSearch({
+          id: trimmed.toLowerCase(),
+          type: "query",
+          title: trimmed,
+          subtitle: "Query",
+          route: `/search?q=${encodeURIComponent(trimmed)}`,
+        });
+        refreshRecent();
         return;
       }
 
@@ -238,7 +303,7 @@ function SearchContent() {
         }
       }
     },
-    [activeFilter, query, refreshRecent, resetResults],
+    [activeFilter, query, refreshRecent, resetResults, user?.id],
   );
 
   const openRecent = (item: RecentSearchItem) => {
@@ -385,6 +450,41 @@ function SearchContent() {
     [activeFilter],
   );
 
+  const visibleTracks = useMemo(
+    () =>
+      sortSearchResults(
+        tracks.filter(
+          (song) =>
+            (!hideExplicit || !song.explicit) && matchesDuration(song.durationMs, durationFilter),
+        ),
+        sortMode,
+        (song) => song.title,
+        (song) => song.popularity,
+      ),
+    [durationFilter, hideExplicit, sortMode, tracks],
+  );
+  const visibleArtists = useMemo(
+    () => sortSearchResults(artists, sortMode, (artist) => artist.name, (artist) => artist.popularity),
+    [artists, sortMode],
+  );
+  const visibleAlbums = useMemo(
+    () => sortSearchResults(albums, sortMode, (album) => album.title),
+    [albums, sortMode],
+  );
+  const visiblePlaylists = useMemo(
+    () => sortSearchResults(playlists, sortMode, (playlist) => playlist.name),
+    [playlists, sortMode],
+  );
+  const hasResults =
+    visibleTracks.length ||
+    visibleArtists.length ||
+    visibleAlbums.length ||
+    visiblePlaylists.length;
+  const activeAdvancedFilterCount =
+    Number(sortMode !== "Relevance") +
+    Number(durationFilter !== "Any") +
+    Number(hideExplicit);
+
   return (
     <AuthGuard>
       <AppShell>
@@ -402,14 +502,14 @@ function SearchContent() {
               }}
               className="search-form"
             >
-              <div className="flex min-w-0 items-center gap-2 rounded-2xl border-[3px] border-black bg-white px-3 shadow-[5px_5px_0_#000]">
+              <div className="brutal-input-shell flex min-w-0 items-center gap-2 rounded-2xl border-[3px] border-black bg-white px-3 shadow-[5px_5px_0_#000]">
                 <Search size={20} strokeWidth={3} />
                 <input
                   value={query}
                   onFocus={() => setFocused(true)}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Cari lagu, artis, album, atau playlist."
-                  className="h-12 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-black/50"
+                  className="brutal-input-control h-12 min-w-0 flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-black/50"
                 />
                 {query ? (
                   <button
@@ -448,10 +548,12 @@ function SearchContent() {
                       key={`${item.type}-${item.id}`}
                       className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3 rounded-2xl border-[3px] border-black bg-white p-2"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={item.imageUrl || "/icons/default-cover.svg"}
                         alt=""
+                        width={44}
+                        height={44}
+                        sizes="44px"
                         className="h-11 w-11 rounded-xl border-[3px] border-black object-cover"
                       />
                       <button className="min-w-0 text-left" onClick={() => openRecent(item)}>
@@ -474,19 +576,94 @@ function SearchContent() {
             ) : null}
           </div>
 
-          <div className="filter-strip">
-            {filters.map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`rounded-full border-[3px] border-black px-4 py-2 text-sm font-black shadow-[4px_4px_0_#000] ${
-                  activeFilter === filter ? "bg-[#FFD600]" : "bg-white"
-                }`}
-              >
-                {filter}
-              </button>
-            ))}
+          <div className="search-filter-toolbar">
+            <div className="filter-strip" role="group" aria-label="Result type">
+              {filters.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  aria-pressed={activeFilter === filter}
+                  onClick={() => setActiveFilter(filter)}
+                  className={`shrink-0 rounded-full border-[3px] border-black px-4 py-2 text-sm font-black shadow-[4px_4px_0_#000] ${
+                    activeFilter === filter ? "bg-[#FFD600]" : "bg-white"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-controls="advanced-search-filters"
+              onClick={() => setFiltersOpen((current) => !current)}
+              className="search-filter-toggle"
+            >
+              <SlidersHorizontal size={17} />
+              Filters
+              {activeAdvancedFilterCount ? (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-black px-1 text-[10px] text-white">
+                  {activeAdvancedFilterCount}
+                </span>
+              ) : null}
+            </button>
           </div>
+
+          {filtersOpen ? (
+            <div id="advanced-search-filters" className="search-filter-panel">
+              <label className="grid min-w-0 gap-1 text-xs font-black uppercase">
+                Sort
+                <select
+                  value={sortMode}
+                  onChange={(event) => setSortMode(event.target.value as SortMode)}
+                  className="search-filter-control"
+                >
+                  {sortModes.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid min-w-0 gap-1 text-xs font-black uppercase">
+                Song length
+                <select
+                  value={durationFilter}
+                  disabled={activeFilter !== "All" && activeFilter !== "Songs"}
+                  onChange={(event) => setDurationFilter(event.target.value as DurationFilter)}
+                  className="search-filter-control disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {durationOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="search-filter-check">
+                <input
+                  type="checkbox"
+                  checked={hideExplicit}
+                  disabled={activeFilter !== "All" && activeFilter !== "Songs"}
+                  onChange={(event) => setHideExplicit(event.target.checked)}
+                />
+                <span>Hide explicit</span>
+              </label>
+              <button
+                type="button"
+                aria-label="Reset search filters"
+                onClick={() => {
+                  setSortMode("Relevance");
+                  setDurationFilter("Any");
+                  setHideExplicit(false);
+                }}
+                className="search-filter-reset"
+              >
+                <RotateCcw size={17} />
+                Reset
+              </button>
+            </div>
+          ) : null}
 
           {!query.trim() ? (
             <section className="grid gap-3">
@@ -531,15 +708,15 @@ function SearchContent() {
             </EmptySection>
           ) : null}
 
-          {!loading && visibleSections.tracks && tracks.length ? (
+          {!loading && visibleSections.tracks && visibleTracks.length ? (
             <section className="grid gap-3">
-              <h2 className="section-title">Songs</h2>
+              <h2 className="section-title">Songs <span className="result-count">{visibleTracks.length}</span></h2>
               <div className="search-results">
-                {tracks.map((song) => (
+                {visibleTracks.map((song) => (
                   <SongCard
                     key={song.id ?? song.spotifyTrackId}
                     song={song}
-                    songs={tracks}
+                    songs={visibleTracks}
                     onPlay={rememberTrack}
                     onAddToPlaylist={(track) => {
                       rememberTrack(track);
@@ -551,11 +728,11 @@ function SearchContent() {
             </section>
           ) : null}
 
-          {!loading && visibleSections.artists && artists.length ? (
+          {!loading && visibleSections.artists && visibleArtists.length ? (
             <section className="grid gap-3">
-              <h2 className="section-title">Artists</h2>
+              <h2 className="section-title">Artists <span className="result-count">{visibleArtists.length}</span></h2>
               <div className="search-results">
-                {artists.map((artist) => (
+                {visibleArtists.map((artist) => (
                   <SearchEntityCard
                     key={artist.id}
                     item={artist}
@@ -567,11 +744,11 @@ function SearchContent() {
             </section>
           ) : null}
 
-          {!loading && visibleSections.albums && albums.length ? (
+          {!loading && visibleSections.albums && visibleAlbums.length ? (
             <section className="grid gap-3">
-              <h2 className="section-title">Albums</h2>
+              <h2 className="section-title">Albums <span className="result-count">{visibleAlbums.length}</span></h2>
               <div className="search-results">
-                {albums.map((album) => (
+                {visibleAlbums.map((album) => (
                   <SearchEntityCard
                     key={album.id}
                     item={album}
@@ -583,11 +760,11 @@ function SearchContent() {
             </section>
           ) : null}
 
-          {!loading && visibleSections.playlists && playlists.length ? (
+          {!loading && visibleSections.playlists && visiblePlaylists.length ? (
             <section className="grid gap-3">
-              <h2 className="section-title">Playlists</h2>
+              <h2 className="section-title">Playlists <span className="result-count">{visiblePlaylists.length}</span></h2>
               <div className="search-results">
-                {playlists.map((playlist) => (
+                {visiblePlaylists.map((playlist) => (
                   <SearchEntityCard
                     key={playlist.id}
                     item={playlist}

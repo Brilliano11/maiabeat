@@ -2,10 +2,10 @@
 
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { MiniPlayer } from "@/components/MiniPlayer";
-import { SpotifyPlayerProvider } from "@/components/music/SpotifyPlayerProvider";
+import { QueueDrawer } from "@/components/QueueDrawer";
 import { ToastHost } from "@/components/ToastHost";
 import { cn, notify } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -24,9 +24,47 @@ import {
   UserRound,
 } from "lucide-react";
 import { CreatePlaylistModal } from "@/components/CreatePlaylistModal";
+import type { PlayerSnapshot, Playlist, QueueItem, Song } from "@/lib/types";
 import { useAuthStore } from "@/store/authStore";
 import { useLibraryStore } from "@/store/libraryStore";
 import { usePlayerStore } from "@/store/playerStore";
+
+type LibrarySnapshot = {
+  likedSongs: Song[];
+  playlists: Playlist[];
+  recentlyPlayed: Song[];
+  playlistSongs?: Song[];
+  queue?: QueueItem[];
+  playerState?: PlayerSnapshot | null;
+} | null;
+
+let librarySyncPromise: Promise<LibrarySnapshot> | null = null;
+let librarySyncUserId: string | null = null;
+let librarySyncAt = 0;
+const librarySyncTtlMs = 30_000;
+let queueHydratedUserId: string | null = null;
+
+function loadLibrarySnapshot(userId: string, force = false) {
+  const now = Date.now();
+  if (
+    !force &&
+    librarySyncPromise &&
+    librarySyncUserId === userId &&
+    now - librarySyncAt < librarySyncTtlMs
+  ) {
+    return librarySyncPromise;
+  }
+
+  librarySyncUserId = userId;
+  librarySyncAt = now;
+  librarySyncPromise = fetch("/api/library")
+    .then(async (response) => {
+      if (!response.ok) return null;
+      return response.json() as Promise<LibrarySnapshot>;
+    })
+    .catch(() => null);
+  return librarySyncPromise;
+}
 
 const sidebarItems = [
   { href: "/home", label: "Home", Icon: Home },
@@ -120,6 +158,7 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
             <Link
               key={playlist.id}
               href={`/playlists/${playlist.id}`}
+              prefetch={false}
               className="text-ellipsis rounded-xl border-[3px] border-black bg-white px-3 py-2 text-xs font-black"
             >
               {playlist.name}
@@ -198,20 +237,55 @@ export function AppShell({
   className?: string;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
-  const syncFromServer = useLibraryStore((state) => state.syncFromServer);
-  const syncQueueFromServer = usePlayerStore((state) => state.syncQueueFromServer);
+  const hydrateLibrary = useLibraryStore((state) => state.hydrateFromServerSnapshot);
+  const hydrateQueue = usePlayerStore((state) => state.hydrateQueueFromServerSnapshot);
+  const theme = useLibraryStore((state) => state.theme);
+  const showNowPlayingBar = !pathname.startsWith("/player");
+  const openQueue = useCallback(() => setQueueOpen(true), []);
+  const closeQueue = useCallback(() => setQueueOpen(false), []);
 
   useEffect(() => {
-    if (user) {
-      void syncFromServer();
-      void syncQueueFromServer();
+    if (!user) {
+      queueHydratedUserId = null;
+      return;
     }
-  }, [syncFromServer, syncQueueFromServer, user]);
+    if (user.id === "local-preview") return;
+
+    let active = true;
+    const shouldHydrateQueue = queueHydratedUserId !== user.id;
+    const queueBeforeRequest = usePlayerStore.getState().queue;
+    const songBeforeRequest = usePlayerStore.getState().currentSong;
+
+    if (shouldHydrateQueue) queueHydratedUserId = user.id;
+
+    void loadLibrarySnapshot(user.id).then((snapshot) => {
+      if (!active || !snapshot) {
+        if (shouldHydrateQueue && queueHydratedUserId === user.id) {
+          queueHydratedUserId = null;
+        }
+        return;
+      }
+      hydrateLibrary(snapshot);
+
+      const player = usePlayerStore.getState();
+      const playbackChangedWhileLoading =
+        player.queue !== queueBeforeRequest || player.currentSong !== songBeforeRequest;
+
+      if (shouldHydrateQueue && !playbackChangedWhileLoading) {
+        hydrateQueue(snapshot.queue, snapshot.playerState);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [hydrateLibrary, hydrateQueue, user]);
 
   if (!withNav) {
     return (
-      <main className={cn("auth-shell", className)}>
+      <main className={cn("auth-shell", `theme-${theme}`, className)}>
         {children}
         <ToastHost />
       </main>
@@ -219,17 +293,18 @@ export function AppShell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={cn("app-shell", `theme-${theme}`)}>
       <div className="desktop-layout">
         <DesktopSidebar onCreatePlaylist={() => setCreateOpen(true)} />
         <main className={cn("page-content", className)}>
           <TopBar />
-          <SpotifyPlayerProvider>{children}</SpotifyPlayerProvider>
+          {children}
         </main>
       </div>
       <ToastHost />
-      <MiniPlayer />
+      {showNowPlayingBar ? <MiniPlayer onOpenQueue={openQueue} /> : null}
       <BottomNavigation />
+      <QueueDrawer open={queueOpen} onClose={closeQueue} />
       <CreatePlaylistModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );

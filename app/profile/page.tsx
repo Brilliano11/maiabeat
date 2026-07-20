@@ -28,9 +28,10 @@ function ProfileContent() {
 
   useEffect(() => {
     const status = params.get("spotify");
-    const message = params.get("message");
     if (status === "connected") notify("Spotify connected");
-    if (status === "error") notify(message ?? "Spotify connection failed");
+    if (status === "error") notify("Spotify connection failed. Please try again.");
+    if (status === "state_error") notify("Spotify connection expired. Please reconnect.");
+    if (status === "supabase_error") notify("Spotify connection is temporarily unavailable.");
   }, [params]);
 
   useEffect(() => {

@@ -8,7 +8,9 @@ import type { AppUser } from "@/lib/types";
 type AuthState = {
   user: AppUser | null;
   loading: boolean;
+  hydrated: boolean;
   error: string | null;
+  setHydrated: (hydrated: boolean) => void;
   isLoggedIn: () => boolean;
   continueAsGuest: () => void;
   restoreSession: () => Promise<boolean>;
@@ -22,10 +24,14 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       loading: false,
+      hydrated: false,
       error: null,
+      setHydrated: (hydrated) => set({ hydrated }),
       isLoggedIn: () => Boolean(get().user),
       continueAsGuest: () => {
-        if (process.env.NODE_ENV === "production") {
+        const host = typeof window === "undefined" ? "" : window.location.hostname;
+        const isLocalHost = host === "127.0.0.1" || host === "localhost";
+        if (process.env.NODE_ENV === "production" && !isLocalHost) {
           set({
             error: "Guest mode is disabled. Login or create an account.",
             user: null,
@@ -135,6 +141,11 @@ export const useAuthStore = create<AuthState>()(
         set({ user: null, error: null, loading: false });
       },
     }),
-    { name: "maiabeat-auth" },
+    {
+      name: "maiabeat-auth",
+      onRehydrateStorage: () => (state) => {
+        state?.setHydrated(true);
+      },
+    },
   ),
 );

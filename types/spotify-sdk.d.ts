@@ -1,20 +1,24 @@
 declare namespace Spotify {
+  type Track = {
+    id: string;
+    uri: string;
+    name: string;
+    duration_ms: number;
+    artists?: Array<{ name: string }>;
+    album?: {
+      name?: string;
+      images?: Array<{ url: string }>;
+    };
+  };
+
   type PlaybackState = {
     paused: boolean;
     position: number;
     duration: number;
     track_window?: {
-      current_track?: {
-        id: string;
-        uri: string;
-        name: string;
-        duration_ms: number;
-        artists?: Array<{ name: string }>;
-        album?: {
-          name?: string;
-          images?: Array<{ url: string }>;
-        };
-      };
+      current_track?: Track;
+      previous_tracks?: Track[];
+      next_tracks?: Track[];
     };
   };
 
@@ -38,8 +42,14 @@ interface Window {
       connect: () => Promise<boolean>;
       disconnect: () => void;
       activateElement: () => Promise<void>;
+      pause: () => Promise<void>;
+      resume: () => Promise<void>;
+      setVolume: (volume: number) => Promise<void>;
     };
   };
   onSpotifyWebPlaybackSDKReady?: () => void;
   maiabeatActivateSpotifyPlayer?: () => Promise<void>;
+  maiabeatPauseSpotifyPlayer?: () => Promise<void>;
+  maiabeatResumeSpotifyPlayer?: () => Promise<void>;
+  maiabeatSetSpotifyVolume?: (volume: number) => Promise<void>;
 }

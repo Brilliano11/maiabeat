@@ -17,23 +17,26 @@ export function BottomNavigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="bottom-navigation border-x-[3px] border-t-[3px] border-black bg-white shadow-[0_-5px_0_#000]">
-      {items.map(({ href, label, Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-black uppercase sm:text-[11px]",
-              active ? "bg-[#FFD600] outline outline-[3px] outline-black" : "bg-white",
-            )}
-          >
-            <Icon size={20} strokeWidth={3} />
-            <span className="text-ellipsis max-w-full">{label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="bottom-navigation-shell">
+      <nav className="bottom-navigation" aria-label="Primary navigation">
+        {items.map(({ href, label, Icon }) => {
+          const active = pathname === href || pathname.startsWith(`${href}/`);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "bottom-navigation-item",
+                active && "bottom-navigation-item-active",
+              )}
+            >
+              <Icon size={20} strokeWidth={3.2} />
+              <span className="text-ellipsis max-w-full">{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }

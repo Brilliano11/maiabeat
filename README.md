@@ -94,7 +94,19 @@ Maiabeat stores Spotify refresh tokens only in Supabase through server routes.
 
 ## Deployment
 
-Deploy to Vercel, add all environment variables, then add the Vercel callback URL to the Spotify Developer Dashboard.
+1. Push changes to a non-production branch and verify the Vercel Preview deployment first.
+2. Add every variable from `.env.example` to the matching Vercel environment. Store
+   `SPOTIFY_CLIENT_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` as sensitive server-only values.
+3. Set `NEXT_PUBLIC_APP_URL` and `SPOTIFY_REDIRECT_URI` to the exact HTTPS deployment URL.
+4. Add the same `/api/spotify/callback` URL to the Spotify Developer Dashboard.
+5. Apply `supabase/schema.sql` to the target Supabase project and verify that RLS is enabled.
+6. If Maiabeat is private, disable new-user signups in Supabase Auth. Otherwise enable email
+   confirmation and review Supabase Auth rate limits.
+7. Add Vercel WAF rate-limit rules for `/api/spotify/*` and `/api/lyrics`. The application also
+   applies a per-user limiter, while WAF provides distributed protection before a request reaches
+   the application.
+8. Test login, Spotify OAuth, playback, queue persistence, playlist editing, and lyrics in Preview
+   before promoting that deployment to Production.
 
 ## Known Limitations
 

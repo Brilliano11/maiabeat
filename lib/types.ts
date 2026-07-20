@@ -23,6 +23,15 @@ export type QueueItem = {
   position: number;
 };
 
+export type PlayerSnapshot = {
+  currentSong: Song | null;
+  currentIndex: number;
+  isPlaying: boolean;
+  progressMs: number;
+  shuffleEnabled: boolean;
+  repeatMode: RepeatMode;
+};
+
 export type ArtistItem = {
   id: string;
   spotifyUri?: string;
@@ -90,6 +99,26 @@ export type Playlist = {
   songIds: string[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type PlaylistUpdate = {
+  name?: string;
+  description?: string;
+  coverUrl?: string | null;
+  visibility?: "private" | "shared";
+};
+
+export type LyricLine = {
+  timeMs: number | null;
+  text: string;
+};
+
+export type LyricsResult = {
+  found: boolean;
+  instrumental: boolean;
+  synced: boolean;
+  lines: LyricLine[];
+  source: "LRCLIB";
 };
 
 export type AppUser = {

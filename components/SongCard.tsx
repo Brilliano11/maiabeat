@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Heart, ListPlus, MoreHorizontal, Play, Plus } from "lucide-react";
 import { BrutalCard } from "@/components/BrutalCard";
 import { useLibraryStore } from "@/store/libraryStore";
@@ -23,21 +24,25 @@ export function SongCard({ song, songs, onAddToPlaylist, onPlay, compact = false
   const liked = useLibraryStore((state) => state.isLiked(songId));
 
   const play = () => {
+    performance.mark("maiabeat:play-click");
     const list = songs?.length ? songs : [song];
-    onPlay?.(song);
-    setQueue(
-      list,
-      list.findIndex((item) => item.spotifyTrackId === song.spotifyTrackId),
+    const selectedIndex = list.findIndex(
+      (item) => item.spotifyTrackId === song.spotifyTrackId,
     );
+    const playableList = selectedIndex >= 0 ? list : [song];
+    onPlay?.(song);
+    setQueue(playableList, selectedIndex >= 0 ? selectedIndex : 0);
   };
 
   return (
     <BrutalCard className="p-3">
       <div className="song-row">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={song.coverUrl || "/icons/default-cover.svg"}
           alt=""
+          width={64}
+          height={64}
+          sizes={compact ? "52px" : "(min-width: 640px) 64px, 52px"}
           className={
             compact
               ? "h-[52px] w-[52px] rounded-xl border-[3px] border-black object-cover"

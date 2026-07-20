@@ -2,8 +2,9 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { makeId } from "@/lib/utils";
-import type { Playlist, Song } from "@/lib/types";
+import { makeId, notify } from "@/lib/utils";
+import type { Playlist, PlaylistUpdate, Song } from "@/lib/types";
+import { useAuthStore } from "@/store/authStore";
 
 type LibraryState = {
   likedSongs: Song[];
@@ -18,17 +19,35 @@ type LibraryState = {
   createPlaylist: (name: string, description?: string, visibility?: "private" | "shared") => void;
   deletePlaylist: (playlistId: string) => void;
   renamePlaylist: (playlistId: string, name: string) => void;
+  updatePlaylist: (playlistId: string, input: PlaylistUpdate) => void;
+  reorderPlaylistSongs: (playlistId: string, songIds: string[]) => void;
   addSongToPlaylist: (playlistId: string, song: Song) => void;
   removeSongFromPlaylist: (playlistId: string, songId: string) => void;
   addRecentlyPlayed: (song: Song) => void;
   clearRecentlyPlayed: () => void;
-  syncFromServer: () => Promise<void>;
+  hydrateFromServerSnapshot: (data: {
+    likedSongs: Song[];
+    playlists: Playlist[];
+    recentlyPlayed: Song[];
+    playlistSongs?: Song[];
+  }) => void;
+  syncFromServer: () => Promise<{
+    likedSongs: Song[];
+    playlists: Playlist[];
+    recentlyPlayed: Song[];
+    queue?: unknown[];
+  } | null>;
   clearAll: () => void;
   toggleTheme: () => void;
 };
 
 const demoUserId = "local-user";
 const songKey = (song: Song) => song.id ?? song.spotifyTrackId;
+const isDemoSong = (song?: Song) => Boolean(song?.spotifyUri?.includes("demo-"));
+const shouldPersistToServer = (song?: Song) => {
+  const userId = useAuthStore.getState().user?.id;
+  return Boolean(userId && userId !== "local-preview" && !isDemoSong(song));
+};
 const uniqueSongs = (songs: Song[]) => {
   const seen = new Set<string>();
   return songs.filter((song) => {
@@ -76,7 +95,9 @@ export const useLibraryStore = create<LibraryState>()(
       likeSong: (song) =>
         set((state) => {
           if (state.likedSongs.some((item) => songKey(item) === songKey(song))) return state;
-          void postJson("/api/library/liked", { song }).catch(() => undefined);
+          if (shouldPersistToServer(song)) {
+            void postJson("/api/library/liked", { song }).catch(() => undefined);
+          }
           return {
             likedSongs: [song, ...state.likedSongs],
             savedSongs: { ...state.savedSongs, [songKey(song)]: song },
@@ -85,7 +106,9 @@ export const useLibraryStore = create<LibraryState>()(
       unlikeSong: (songId) =>
         set((state) => {
           const song = state.likedSongs.find((item) => songKey(item) === songId);
-          if (song) void postJson("/api/library/liked", { song }).catch(() => undefined);
+          if (song && shouldPersistToServer(song)) {
+            void postJson("/api/library/liked", { song }).catch(() => undefined);
+          }
           return {
             likedSongs: state.likedSongs.filter((item) => songKey(item) !== songId),
           };
@@ -99,11 +122,13 @@ export const useLibraryStore = create<LibraryState>()(
         const trimmed = name.trim();
         if (!trimmed) return;
         const now = new Date().toISOString();
+        const ownerId = useAuthStore.getState().user?.id ?? demoUserId;
         set((state) => ({
           playlists: [
             {
               id: makeId("playlist"),
-              userId: demoUserId,
+              ownerId,
+              userId: ownerId,
               name: trimmed,
               description,
               visibility,
@@ -115,49 +140,83 @@ export const useLibraryStore = create<LibraryState>()(
             ...state.playlists,
           ],
         }));
-        void postJson<{ playlist: Playlist }>("/api/library/playlists", {
-          name: trimmed,
-          description,
-          visibility,
-        })
-          .then(({ playlist }) =>
-            set((state) => ({
-              playlists: [
-                playlist,
-                ...state.playlists.filter((item) => item.name !== trimmed),
-              ],
-            })),
-          )
-          .catch(() => undefined);
+        if (shouldPersistToServer()) {
+          void postJson<{ playlist: Playlist }>("/api/library/playlists", {
+            name: trimmed,
+            description,
+            visibility,
+          })
+            .then(({ playlist }) =>
+              set((state) => ({
+                playlists: [
+                  playlist,
+                  ...state.playlists.filter((item) => item.name !== trimmed),
+                ],
+              })),
+            )
+            .catch(() => undefined);
+        }
       },
       deletePlaylist: (playlistId) =>
         set((state) => {
-          void fetch(`/api/library/playlists/${playlistId}`, { method: "DELETE" }).catch(
-            () => undefined,
-          );
+          if (shouldPersistToServer()) {
+            void fetch(`/api/library/playlists/${playlistId}`, { method: "DELETE" }).catch(
+              () => undefined,
+            );
+          }
           return {
             playlists: state.playlists.filter((playlist) => playlist.id !== playlistId),
           };
         }),
-      renamePlaylist: (playlistId, name) => {
-        const trimmed = name.trim();
-        if (!trimmed) return;
+      renamePlaylist: (playlistId, name) => get().updatePlaylist(playlistId, { name }),
+      updatePlaylist: (playlistId, input) => {
+        const name = input.name?.trim();
+        if (input.name !== undefined && !name) return;
+        const normalized: PlaylistUpdate = {
+          ...input,
+          name,
+          description: input.description?.trim(),
+        };
         set((state) => ({
           playlists: state.playlists.map((playlist) =>
             playlist.id === playlistId
-              ? { ...playlist, name: trimmed, updatedAt: new Date().toISOString() }
+              ? { ...playlist, ...normalized, updatedAt: new Date().toISOString() }
+              : playlist,
+            ),
+        }));
+        if (shouldPersistToServer()) {
+          void postJson(`/api/library/playlists/${playlistId}`, normalized, {
+            method: "PATCH",
+          }).catch((error) => {
+            notify(error instanceof Error ? error.message : "Playlist update failed.");
+          });
+        }
+      },
+      reorderPlaylistSongs: (playlistId, songIds) => {
+        set((state) => ({
+          playlists: state.playlists.map((playlist) =>
+            playlist.id === playlistId
+              ? { ...playlist, songIds, updatedAt: new Date().toISOString() }
               : playlist,
           ),
         }));
-        void postJson(`/api/library/playlists/${playlistId}`, { name: trimmed }, { method: "PATCH" }).catch(
-          () => undefined,
-        );
+        if (shouldPersistToServer()) {
+          void postJson(
+            `/api/library/playlists/${playlistId}/songs`,
+            { songIds },
+            { method: "PUT" },
+          ).catch((error) => {
+            notify(error instanceof Error ? error.message : "Playlist reorder failed.");
+          });
+        }
       },
       addSongToPlaylist: (playlistId, song) =>
         set((state) => {
-          void postJson(`/api/library/playlists/${playlistId}/songs`, { song }).catch(
-            () => undefined,
-          );
+          if (shouldPersistToServer(song)) {
+            void postJson(`/api/library/playlists/${playlistId}/songs`, { song }).catch(
+              () => undefined,
+            );
+          }
           return {
             savedSongs: { ...state.savedSongs, [songKey(song)]: song },
             playlists: state.playlists.map((playlist) =>
@@ -174,11 +233,13 @@ export const useLibraryStore = create<LibraryState>()(
         }),
       removeSongFromPlaylist: (playlistId, songId) =>
         set((state) => {
-          void postJson(
-            `/api/library/playlists/${playlistId}/songs`,
-            { songId },
-            { method: "DELETE" },
-          ).catch(() => undefined);
+          if (shouldPersistToServer()) {
+            void postJson(
+              `/api/library/playlists/${playlistId}/songs`,
+              { songId },
+              { method: "DELETE" },
+            ).catch(() => undefined);
+          }
           return {
             playlists: state.playlists.map((playlist) =>
               playlist.id === playlistId
@@ -193,7 +254,9 @@ export const useLibraryStore = create<LibraryState>()(
         }),
       addRecentlyPlayed: (song) =>
         set((state) => {
-          void postJson("/api/library/recent", { song }).catch(() => undefined);
+          if (shouldPersistToServer(song)) {
+            void postJson("/api/library/recent", { song }).catch(() => undefined);
+          }
           return {
             savedSongs: { ...state.savedSongs, [songKey(song)]: song },
             recentlyPlayed: [
@@ -203,19 +266,16 @@ export const useLibraryStore = create<LibraryState>()(
           };
         }),
       clearRecentlyPlayed: () => {
-        void fetch("/api/library/recent", { method: "DELETE" }).catch(() => undefined);
+        if (shouldPersistToServer()) {
+          void fetch("/api/library/recent", { method: "DELETE" }).catch(() => undefined);
+        }
         set({ recentlyPlayed: [] });
       },
-      syncFromServer: async () => {
-        const response = await fetch("/api/library");
-        if (!response.ok) return;
-        const data = (await response.json()) as {
-          likedSongs: Song[];
-          playlists: Playlist[];
-          recentlyPlayed: Song[];
-        };
+      hydrateFromServerSnapshot: (data) => {
         const savedSongs = Object.fromEntries(
-          [...data.likedSongs, ...data.recentlyPlayed].map((song) => [songKey(song), song]),
+          [...data.likedSongs, ...data.recentlyPlayed, ...(data.playlistSongs ?? [])].map(
+            (song) => [songKey(song), song],
+          ),
         );
         set({
           likedSongs: uniqueSongs(data.likedSongs),
@@ -223,6 +283,18 @@ export const useLibraryStore = create<LibraryState>()(
           recentlyPlayed: uniqueSongs(data.recentlyPlayed),
           savedSongs,
         });
+      },
+      syncFromServer: async () => {
+        const response = await fetch("/api/library");
+        if (!response.ok) return null;
+        const data = (await response.json()) as {
+          likedSongs: Song[];
+          playlists: Playlist[];
+          recentlyPlayed: Song[];
+          queue?: unknown[];
+        };
+        get().hydrateFromServerSnapshot(data);
+        return data;
       },
       clearAll: () =>
         set({

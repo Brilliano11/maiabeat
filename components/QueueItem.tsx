@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ArrowDown, ArrowUp, Play, X } from "lucide-react";
 import { usePlayerStore } from "@/store/playerStore";
 import type { QueueItem as QueueItemType } from "@/lib/types";
@@ -36,10 +37,12 @@ export function QueueItem({ item }: { item: QueueItemType }) {
           <ArrowDown size={14} />
         </button>
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src={song.coverUrl || "/icons/default-cover.svg"}
         alt=""
+        width={52}
+        height={52}
+        sizes="52px"
         className="h-[52px] w-[52px] rounded-xl border-[3px] border-black object-cover"
       />
       <button className="min-w-0 flex-1 text-left" onClick={playNow}>

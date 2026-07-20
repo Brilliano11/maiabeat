@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readJsonObject } from "@/lib/api/request";
 import { requireUser } from "@/lib/auth/routeGuard";
 import {
   addRecentlyPlayedForUser,
@@ -11,10 +12,11 @@ export async function POST(request: Request) {
   if (guard.response) return guard.response;
 
   try {
-    const { song, progressMs } = (await request.json()) as {
+    const body = await readJsonObject<{
       song?: Song;
       progressMs?: number;
-    };
+    }>(request);
+    const { song, progressMs } = body ?? {};
     if (!song) return NextResponse.json({ error: "Song required." }, { status: 400 });
     const savedSong = await addRecentlyPlayedForUser(guard.user.id, song, progressMs ?? 0);
     return NextResponse.json({ song: savedSong });

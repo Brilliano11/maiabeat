@@ -29,6 +29,14 @@ function hasSupabaseSession(request: NextRequest) {
     .some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"));
 }
 
+function isLocalPreviewRequest(request: NextRequest) {
+  const host = request.nextUrl.hostname;
+  return (
+    request.cookies.get("maiabeat_preview")?.value === "1" &&
+    (process.env.NODE_ENV !== "production" || host === "127.0.0.1" || host === "localhost")
+  );
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -40,12 +48,7 @@ export function proxy(request: NextRequest) {
 
   if (!isAppPath) return NextResponse.next();
 
-  if (
-    process.env.NODE_ENV !== "production" &&
-    request.cookies.get("maiabeat_preview")?.value === "1"
-  ) {
-    return NextResponse.next();
-  }
+  if (isLocalPreviewRequest(request)) return NextResponse.next();
 
   if (!hasSupabaseSession(request)) {
     const url = request.nextUrl.clone();

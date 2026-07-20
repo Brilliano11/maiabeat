@@ -40,11 +40,16 @@ export default function LibraryPage() {
             <h1 className="page-title">Library</h1>
           </header>
           <div className="shortcut-grid">
-            <Link href="/liked">
-              <BrutalCard className="min-h-28 bg-[#FF3B6B] text-white">
-                <Heart />
-                <p className="mt-4 card-title">Liked Songs</p>
-                <p className="text-sm font-bold">{likedSongs.length} tracks</p>
+            <Link href="/liked" aria-label="Open Liked Songs">
+              <BrutalCard
+                className="grid min-h-28 content-between bg-[#FF3B6B] text-black"
+                style={{ backgroundColor: "#FF3B6B" }}
+              >
+                <Heart size={22} fill="#FFD600" />
+                <div className="min-w-0">
+                  <p className="card-title">Liked Songs</p>
+                  <p className="text-sm font-bold">{likedSongs.length} tracks</p>
+                </div>
               </BrutalCard>
             </Link>
             <Link href="/queue">
@@ -55,40 +60,41 @@ export default function LibraryPage() {
               </BrutalCard>
             </Link>
           </div>
-          {(filter === "All" || filter === "Playlists") ? (
           <section className="grid gap-3">
             <div className="filter-strip">
-              {["All", "Playlists", "Artists", "Albums", "Liked"].map((item) => (
+              {["All", "Playlists", "Artists", "Albums", "Liked Songs"].map((item) => (
                 <button
                   key={item}
-                  onClick={() => setFilter(item)}
+                  onClick={() => setFilter(item === "Liked Songs" ? "Liked" : item)}
                   className={`rounded-full border-[3px] border-black px-4 py-2 text-sm font-black shadow-[4px_4px_0_#000] ${
-                    filter === item ? "bg-[#FFD600]" : "bg-white"
+                    filter === item || (filter === "Liked" && item === "Liked Songs") ? "bg-[#FFD600]" : "bg-white"
                   }`}
                 >
                   {item}
                 </button>
               ))}
             </div>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search library"
-                className="min-h-12 min-w-0 rounded-2xl border-[3px] border-black bg-white px-3 font-bold shadow-[5px_5px_0_#000] outline-none"
-              />
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-                className="min-h-12 rounded-2xl border-[3px] border-black bg-white px-3 font-black shadow-[5px_5px_0_#000] outline-none"
-              >
-                <option value="recently-added">Recently added</option>
-                <option value="alphabetical">Alphabetical</option>
-                <option value="recently-played">Recently played</option>
-              </select>
-            </div>
+            {filter === "All" || filter === "Playlists" ? (
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search library"
+                  className="min-h-12 min-w-0 rounded-2xl border-[3px] border-black bg-white px-3 font-bold shadow-[5px_5px_0_#000] outline-none"
+                />
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                  className="min-h-12 rounded-2xl border-[3px] border-black bg-white px-3 font-black shadow-[5px_5px_0_#000] outline-none"
+                >
+                  <option value="recently-added">Recently added</option>
+                  <option value="alphabetical">Alphabetical</option>
+                  <option value="recently-played">Recently played</option>
+                </select>
+              </div>
+            ) : null}
           </section>
-          ) : null}
+          {filter === "All" || filter === "Playlists" ? (
           <section className="grid gap-3">
             <div className="flex items-center justify-between">
               <h2 className="section-title">Your Playlists</h2>
@@ -111,6 +117,7 @@ export default function LibraryPage() {
               </BrutalCard>
             ) : null}
           </section>
+          ) : null}
           {(filter === "All" || filter === "Liked") && likedSongs.length ? (
             <section className="grid gap-3">
               <h2 className="section-title">Liked Songs</h2>

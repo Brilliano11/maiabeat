@@ -3,28 +3,31 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSpotifyAuthorizationUrl } from "@/lib/spotify/server";
 import { getCurrentUser } from "@/lib/auth/session";
-
-function getAppUrl(request: Request) {
-  const requestOrigin = new URL(request.url).origin;
-  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!configuredUrl) return requestOrigin;
-
-  try {
-    const configured = new URL(configuredUrl);
-    if (configured.hostname === "localhost" || configured.hostname === "127.0.0.1") {
-      return requestOrigin;
-    }
-    return configured.origin;
-  } catch {
-    return requestOrigin;
-  }
-}
+import { getTrustedAppOrigin } from "@/lib/security/appOrigin";
+import { consumeRateLimit } from "@/lib/security/rateLimit";
 
 export async function GET(request: Request) {
-  const appUrl = getAppUrl(request);
-  const { user } = await getCurrentUser();
+  let appUrl: string;
+  try {
+    appUrl = getTrustedAppOrigin(request);
+  } catch {
+    return NextResponse.json({ error: "Application URL is not configured." }, { status: 500 });
+  }
 
+  const { user } = await getCurrentUser();
   if (!user) return NextResponse.redirect(new URL("/login", appUrl));
+
+  const rateLimit = consumeRateLimit(user.id, {
+    namespace: "spotify-oauth-login",
+    limit: 5,
+    windowMs: 10 * 60_000,
+  });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many Spotify connection attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
 
   try {
     const state = randomBytes(24).toString("hex");

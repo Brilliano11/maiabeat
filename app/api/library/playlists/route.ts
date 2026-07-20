@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readJsonObject } from "@/lib/api/request";
 import { requireUser } from "@/lib/auth/routeGuard";
 import { createPlaylistForUser } from "@/lib/library/server";
 
@@ -7,12 +8,12 @@ export async function POST(request: Request) {
   if (guard.response) return guard.response;
 
   try {
-    const input = (await request.json()) as {
+    const input = await readJsonObject<{
       name?: string;
       description?: string;
       visibility?: "private" | "shared";
-    };
-    if (!input.name?.trim()) {
+    }>(request);
+    if (!input?.name?.trim()) {
       return NextResponse.json({ error: "Playlist name required." }, { status: 400 });
     }
     const playlist = await createPlaylistForUser(guard.user.id, {

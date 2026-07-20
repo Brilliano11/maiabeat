@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Disc3, Headphones, Heart, Library, ListMusic, PlugZap, Search, Wifi } from "lucide-react";
@@ -40,6 +41,7 @@ export default function HomePage() {
   const recentlyPlayed = useLibraryStore((state) => state.recentlyPlayed);
   const likedSongs = useLibraryStore((state) => state.likedSongs);
   const playlists = useLibraryStore((state) => state.playlists);
+  const userId = user?.id;
   const name = user?.displayName || "Anggita";
   const recent = recentlyPlayed
     .filter((song) => song.spotifyUri && !song.spotifyUri.includes("demo-"))
@@ -54,6 +56,12 @@ export default function HomePage() {
     let active = true;
 
     async function loadSpotifyStatus() {
+      if (!userId || userId === "local-preview") {
+        setSpotifyStatus("disconnected");
+        setSpotifyLabel("");
+        return;
+      }
+
       try {
         const response = await fetch("/api/spotify/me");
         const data = (await response.json().catch(() => ({}))) as {
@@ -78,11 +86,17 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     let active = true;
     async function loadHome() {
+      if (!userId || userId === "local-preview") {
+        setHomeData(null);
+        setHomeError("");
+        return;
+      }
+
       try {
         const response = await fetch("/api/home");
         const data = (await response.json()) as HomePayload & { error?: string };
@@ -99,7 +113,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [userId]);
 
   return (
     <AuthGuard>
@@ -249,7 +263,7 @@ export default function HomePage() {
             <h2 className="section-title">Made for Maia & Anggita</h2>
             <div className="playlist-grid">
               {(homeData?.madeForUs ?? []).slice(0, 6).map((playlist) => (
-                <Link key={playlist.id} href={`/playlist/${playlist.id}`}>
+                <Link key={playlist.id} href={`/playlist/${playlist.id}`} prefetch={false}>
                   <BrutalCard className="grid min-h-32 place-items-start bg-[#FFD600] p-3">
                     <Search size={24} />
                     <p className="card-title mt-3 text-ellipsis max-w-full">{playlist.name}</p>
@@ -306,8 +320,14 @@ export default function HomePage() {
               {(homeData?.topArtists ?? []).slice(0, 6).map((artist) => (
                 <Link key={artist.id} href={`/artist/${artist.id}`}>
                   <BrutalCard className="grid gap-3 bg-white">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={artist.imageUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover" />
+                    <Image
+                      src={artist.imageUrl || "/icons/default-cover.svg"}
+                      alt=""
+                      width={320}
+                      height={320}
+                      sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+                      className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover"
+                    />
                     <p className="text-ellipsis card-title">{artist.name}</p>
                   </BrutalCard>
                 </Link>
@@ -327,6 +347,7 @@ export default function HomePage() {
                 <Link
                   key={playlist.id}
                   href={`/playlists/${playlist.id}`}
+                  prefetch={false}
                   className="min-w-0 rounded-2xl border-[3px] border-black bg-white p-3 font-black shadow-[5px_5px_0_#000]"
                 >
                   <span className="text-ellipsis block">{playlist.name}</span>
@@ -353,8 +374,14 @@ export default function HomePage() {
               {(homeData?.newReleases ?? []).slice(0, 6).map((album) => (
                 <Link key={album.id} href={`/album/${album.id}`}>
                   <BrutalCard className="grid gap-3 bg-white">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={album.coverUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover" />
+                    <Image
+                      src={album.coverUrl || "/icons/default-cover.svg"}
+                      alt=""
+                      width={320}
+                      height={320}
+                      sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+                      className="aspect-square w-full rounded-2xl border-[3px] border-black object-cover"
+                    />
                     <p className="text-ellipsis card-title">{album.title}</p>
                     <p className="text-ellipsis text-xs font-bold text-black/70">{album.artist}</p>
                   </BrutalCard>

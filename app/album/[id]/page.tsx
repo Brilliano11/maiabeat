@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Play, Save, Shuffle } from "lucide-react";
@@ -62,8 +63,14 @@ export default function AlbumPage() {
           {data ? (
             <>
               <header className="grid gap-5 rounded-[2rem] border-[3px] border-black bg-[#FFD600] p-5 shadow-[6px_6px_0_#000] md:grid-cols-[170px_minmax(0,1fr)] md:items-end">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.album.coverUrl || "/icons/default-cover.svg"} alt="" className="aspect-square w-40 rounded-3xl border-[3px] border-black object-cover" />
+                <Image
+                  src={data.album.coverUrl || "/icons/default-cover.svg"}
+                  alt=""
+                  width={160}
+                  height={160}
+                  sizes="160px"
+                  className="aspect-square w-40 rounded-3xl border-[3px] border-black object-cover"
+                />
                 <div className="min-w-0">
                   <p className="page-kicker">{data.album.albumType ?? "Album"}</p>
                   <h1 className="page-title text-ellipsis">{data.album.title}</h1>

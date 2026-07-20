@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readJsonObject } from "@/lib/api/request";
 import { requireUser } from "@/lib/auth/routeGuard";
 import { formatSpotifyPlaybackError, spotifyFetchForUser } from "@/lib/spotify/server";
 
@@ -6,7 +7,8 @@ export async function PUT(request: Request) {
   const guard = await requireUser();
   if (guard.response) return guard.response;
 
-  const { device_id } = (await request.json()) as { device_id?: string };
+  const body = await readJsonObject<{ device_id?: string }>(request);
+  const { device_id } = body ?? {};
   if (!device_id) return NextResponse.json({ error: "Device ID required." }, { status: 400 });
 
   try {

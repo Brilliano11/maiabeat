@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink, Heart, ListMusic, Save, Share2 } from "lucide-react";
 import { useState } from "react";
@@ -8,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
 import { BrutalButton } from "@/components/BrutalButton";
 import { BrutalCard } from "@/components/BrutalCard";
+import { LyricsPanel } from "@/components/LyricsPanel";
 import { PlaybackControls } from "@/components/music/PlaybackControls";
 import { formatTime, notify } from "@/lib/utils";
 import { useLibraryStore } from "@/store/libraryStore";
@@ -46,10 +48,13 @@ export default function PlayerPage() {
           </BrutalCard>
         ) : (
           <div className="player-layout">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={displaySong.coverUrl || "/icons/default-cover.svg"}
               alt=""
+              width={640}
+              height={640}
+              priority
+              sizes="(min-width: 1280px) 33vw, (min-width: 768px) 45vw, 100vw"
               className="player-cover rounded-[2rem] border-[3px] border-black shadow-[8px_8px_0_#000]"
             />
             <div className="grid min-w-0 gap-5">
@@ -90,8 +95,12 @@ export default function PlayerPage() {
                 <BrutalButton
                   tone="yellow"
                   onClick={async () => {
-                    await navigator.clipboard?.writeText(window.location.href);
-                    notify("Link copied");
+                    try {
+                      await navigator.clipboard?.writeText(window.location.href);
+                      notify("Link copied");
+                    } catch {
+                      notify("Could not copy link");
+                    }
                   }}
                   icon={<Share2 size={17} />}
                 >
@@ -100,7 +109,9 @@ export default function PlayerPage() {
                 <BrutalButton
                   tone="black"
                   onClick={() => {
-                    if (displaySong.externalUrl) window.open(displaySong.externalUrl, "_blank");
+                    if (displaySong.externalUrl) {
+                      window.open(displaySong.externalUrl, "_blank", "noopener,noreferrer");
+                    }
                     else notify("Spotify link unavailable");
                   }}
                   icon={<ExternalLink size={17} />}
@@ -123,6 +134,16 @@ export default function PlayerPage() {
             </Link>
           </div>
         )}
+        {displaySong ? (
+          <div className="mt-6">
+            <LyricsPanel
+              key={displaySong.spotifyTrackId}
+              song={displaySong}
+              progressMs={progressMs}
+              onSeek={seek}
+            />
+          </div>
+        ) : null}
         <AddToPlaylistModal song={modalOpen ? displaySong : null} onClose={() => setModalOpen(false)} />
       </AppShell>
     </AuthGuard>

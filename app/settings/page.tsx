@@ -29,7 +29,7 @@ export default function SettingsPage() {
             <p className="text-sm font-black uppercase">Theme</p>
             <h2 className="section-title">{theme === "sunny" ? "Sunny Brutal" : "Night Brutal"}</h2>
             <BrutalButton tone="cyan" onClick={toggleTheme}>
-              Toggle Theme
+              {theme === "sunny" ? "Switch to Night" : "Switch to Sunny"}
             </BrutalButton>
           </BrutalCard>
           <BrutalCard className="grid gap-3">

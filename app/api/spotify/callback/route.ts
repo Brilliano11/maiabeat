@@ -6,30 +6,22 @@ import {
 } from "@/lib/spotify/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/session";
-
-function getAppUrl(request: Request) {
-  const requestOrigin = new URL(request.url).origin;
-  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!configuredUrl) return requestOrigin;
-
-  try {
-    const configured = new URL(configuredUrl);
-    if (configured.hostname === "localhost" || configured.hostname === "127.0.0.1") {
-      return requestOrigin;
-    }
-    return configured.origin;
-  } catch {
-    return requestOrigin;
-  }
-}
+import { getTrustedAppOrigin } from "@/lib/security/appOrigin";
 
 export async function GET(request: Request) {
-  const appUrl = getAppUrl(request);
+  let appUrl: string;
+  try {
+    appUrl = getTrustedAppOrigin(request);
+  } catch {
+    return NextResponse.json({ error: "Application URL is not configured." }, { status: 500 });
+  }
+
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const cookieStore = await cookies();
   const expectedState = cookieStore.get("maiabeat_spotify_state")?.value;
+  cookieStore.delete("maiabeat_spotify_state");
 
   if (!code || !state || !expectedState || state !== expectedState) {
     return NextResponse.redirect(new URL("/profile?spotify=state_error", appUrl));
@@ -71,15 +63,13 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    cookieStore.delete("maiabeat_spotify_state");
     return NextResponse.redirect(new URL("/profile?spotify=connected", appUrl));
   } catch (error) {
+    console.error("Spotify OAuth callback failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
     const url = new URL("/profile", appUrl);
     url.searchParams.set("spotify", "error");
-    url.searchParams.set(
-      "message",
-      error instanceof Error ? error.message : "Spotify connection failed",
-    );
     return NextResponse.redirect(url);
   }
 }
