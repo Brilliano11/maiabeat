@@ -800,6 +800,7 @@ test("Listening Together connects host and listener through the Realtime fallbac
     user: { id: string; email: string; displayName: string },
     withHostPlayback: boolean,
   ) => {
+    if (!baseURL) throw new Error("Playwright baseURL is required for this test.");
     await page.addInitScript((deviceId) => {
       const listeners: Record<string, (payload: unknown) => void> = {};
       class MockSpotifyPlayer {
@@ -882,9 +883,15 @@ test("Listening Together connects host and listener through the Realtime fallbac
       });
     });
 
-    await page.goto("/preview");
-    await expect(page).toHaveURL(/\/home$/);
-    await page.evaluate(
+    await page.context().addCookies([
+      {
+        name: "sb-e2e-auth-token",
+        value: "e2e-session",
+        url: baseURL,
+        sameSite: "Lax",
+      },
+    ]);
+    await page.addInitScript(
       ({ nextUser, nextSong, seedPlayback }) => {
         localStorage.setItem(
           "maiabeat-auth",
