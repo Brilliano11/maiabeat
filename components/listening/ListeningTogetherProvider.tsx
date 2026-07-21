@@ -411,7 +411,7 @@ export function ListeningTogetherProvider({ children }: { children: React.ReactN
       document.removeEventListener("visibilitychange", onVisibility);
       void supabase.removeChannel(channel);
     };
-  }, [activeRoomId, roomTransport, spotifyDeviceId, user]);
+  }, [activeRoomId, roomTransport, user]);
 
   useEffect(() => {
     if (
@@ -721,18 +721,40 @@ export function ListeningTogetherProvider({ children }: { children: React.ReactN
       window.clearInterval(livenessTimer);
       window.clearTimeout(connectTimer);
       const explicitlyLeft = useListeningStore.getState().activeRoomId !== roomId;
-      void (async () => {
-        if (role === "host" && subscribed && explicitlyLeft) {
-          await channel.send({
+      if (role === "host" && subscribed && explicitlyLeft) {
+        void channel
+          .send({
             type: "broadcast",
             event: "room-ended",
             payload: { code: roomCode, hostId: user.id },
-          });
-        }
-        if (subscribed) await channel.untrack();
-        await supabase.removeChannel(channel);
-      })();
+          })
+          .catch(() => undefined)
+          .then(() => supabase.removeChannel(channel))
+          .catch(() => undefined);
+      } else {
+        void supabase.removeChannel(channel).catch(() => undefined);
+      }
     };
+  }, [activeRoomId, role, roomTransport, user]);
+
+  useEffect(() => {
+    if (
+      !spotifyDeviceId ||
+      !activeRoomId ||
+      role !== "listener" ||
+      !user ||
+      user.id === "local-preview"
+    ) {
+      return;
+    }
+    const room = useListeningStore.getState().room;
+    if (!room || room.id !== activeRoomId || room.status !== "active") return;
+    void applyListenerPlayback(
+      room,
+      lastAppliedVersionRef,
+      applyingRemoteRef,
+      true,
+    );
   }, [activeRoomId, role, roomTransport, spotifyDeviceId, user]);
 
   return <>{children}</>;

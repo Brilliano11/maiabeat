@@ -779,7 +779,7 @@ test("Listening Together lobby explains account requirement in preview", async (
   await expect(page.getByText("Preview mode", { exact: true })).toBeVisible();
 });
 
-test("Listening Together connects host and listener through the Realtime fallback", async ({
+test("Listening Together keeps songs synced when the listener device becomes ready", async ({
   browser,
   page: hostPage,
   baseURL,
@@ -793,6 +793,13 @@ test("Listening Together connects host and listener through the Realtime fallbac
     coverUrl: "/icons/cover-cyan.svg",
     durationMs: 210000,
   };
+  const nextSong = {
+    ...song,
+    id: "broadcast-next-song",
+    spotifyTrackId: "broadcast-next-song",
+    spotifyUri: "spotify:track:broadcast-next-song",
+    title: "Still Realtime Together",
+  };
   const listenerPlayRequests: Array<{ spotifyUri?: string }> = [];
 
   const preparePage = async (
@@ -801,14 +808,14 @@ test("Listening Together connects host and listener through the Realtime fallbac
     withHostPlayback: boolean,
   ) => {
     if (!baseURL) throw new Error("Playwright baseURL is required for this test.");
-    await page.addInitScript((deviceId) => {
+    await page.addInitScript(({ deviceId, readyDelay }) => {
       const listeners: Record<string, (payload: unknown) => void> = {};
       class MockSpotifyPlayer {
         addListener(event: string, callback: (payload: unknown) => void) {
           listeners[event] = callback;
         }
         async connect() {
-          window.setTimeout(() => listeners.ready?.({ device_id: deviceId }), 0);
+          window.setTimeout(() => listeners.ready?.({ device_id: deviceId }), readyDelay);
           return true;
         }
         disconnect() {}
@@ -821,7 +828,10 @@ test("Listening Together connects host and listener through the Realtime fallbac
       (window as unknown as { Spotify: { Player: typeof MockSpotifyPlayer } }).Spotify = {
         Player: MockSpotifyPlayer,
       };
-    }, `${user.id}-device`);
+    }, {
+      deviceId: `${user.id}-device`,
+      readyDelay: withHostPlayback ? 2_500 : 3_500,
+    });
 
     await page.route("**/api/listening/rooms", async (route) => {
       await route.fulfill({
@@ -849,7 +859,12 @@ test("Listening Together connects host and listener through the Realtime fallbac
           playlists: [],
           recentlyPlayed: [],
           playlistSongs: [],
-          queue: withHostPlayback ? [{ id: "broadcast-song-0", song, position: 0 }] : [],
+          queue: withHostPlayback
+            ? [
+                { id: "broadcast-song-0", song, position: 0 },
+                { id: "broadcast-song-1", song: nextSong, position: 1 },
+              ]
+            : [],
           playerState: withHostPlayback
             ? {
                 currentSong: song,
@@ -892,7 +907,7 @@ test("Listening Together connects host and listener through the Realtime fallbac
       },
     ]);
     await page.addInitScript(
-      ({ nextUser, nextSong, seedPlayback }) => {
+      ({ nextUser, firstSong, secondSong, seedPlayback }) => {
         localStorage.setItem(
           "maiabeat-auth",
           JSON.stringify({
@@ -910,9 +925,12 @@ test("Listening Together connects host and listener through the Realtime fallbac
           "maiabeat-player",
           JSON.stringify({
             state: {
-              currentSong: seedPlayback ? nextSong : null,
+              currentSong: seedPlayback ? firstSong : null,
               queue: seedPlayback
-                ? [{ id: "broadcast-song-0", song: nextSong, position: 0 }]
+                ? [
+                    { id: "broadcast-song-0", song: firstSong, position: 0 },
+                    { id: "broadcast-song-1", song: secondSong, position: 1 },
+                  ]
                 : [],
               currentIndex: 0,
               shuffleEnabled: false,
@@ -926,12 +944,20 @@ test("Listening Together connects host and listener through the Realtime fallbac
           }),
         );
       },
-      { nextUser: user, nextSong: song, seedPlayback: withHostPlayback },
+      {
+        nextUser: user,
+        firstSong: song,
+        secondSong: nextSong,
+        seedPlayback: withHostPlayback,
+      },
     );
   };
 
   const listenerContext = await browser.newContext({ baseURL });
   const listenerPage = await listenerContext.newPage();
+  const pageErrors: string[] = [];
+  hostPage.on("pageerror", (error) => pageErrors.push(`host: ${error.message}`));
+  listenerPage.on("pageerror", (error) => pageErrors.push(`listener: ${error.message}`));
   try {
     await preparePage(
       hostPage,
@@ -975,6 +1001,23 @@ test("Listening Together connects host and listener through the Realtime fallbac
     await expect.poll(() => listenerPlayRequests.at(-1)?.spotifyUri ?? null).toBe(
       song.spotifyUri,
     );
+
+    await hostPage
+      .locator(".listening-now-playing")
+      .getByRole("button", { name: "Next", exact: true })
+      .click();
+    await expect(
+      listenerPage
+        .locator(".listening-now-playing")
+        .getByText("Still Realtime Together", { exact: true }),
+    ).toBeVisible();
+    await expect.poll(() => listenerPlayRequests.at(-1)?.spotifyUri ?? null).toBe(
+      nextSong.spotifyUri,
+    );
+
+    await listenerPage.goto("/library");
+    await expect(listenerPage.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
+    expect(pageErrors).toEqual([]);
   } finally {
     await listenerContext.close();
   }
