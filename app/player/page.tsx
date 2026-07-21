@@ -14,6 +14,7 @@ import { PlaybackControls } from "@/components/music/PlaybackControls";
 import { formatTime, notify } from "@/lib/utils";
 import { useLibraryStore } from "@/store/libraryStore";
 import { usePlayerStore } from "@/store/playerStore";
+import { useListeningStore } from "@/store/listeningStore";
 
 export default function PlayerPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -22,6 +23,9 @@ export default function PlayerPage() {
   const progressMs = usePlayerStore((state) => state.progressMs);
   const durationMs = usePlayerStore((state) => state.durationMs);
   const seek = usePlayerStore((state) => state.seek);
+  const seekLocked = useListeningStore(
+    (state) => Boolean(state.activeRoomId && state.role === "listener"),
+  );
   const toggleLike = useLibraryStore((state) => state.toggleLike);
   const isLiked = useLibraryStore((state) =>
     currentSong && !currentSong.spotifyUri.includes("demo-")
@@ -72,6 +76,7 @@ export default function PlayerPage() {
                   min={0}
                   max={durationMs || displaySong.durationMs}
                   value={Math.min(progressMs, durationMs || progressMs)}
+                  disabled={seekLocked}
                   onChange={(event) => void seek(Number(event.target.value))}
                   className="w-full"
                 />

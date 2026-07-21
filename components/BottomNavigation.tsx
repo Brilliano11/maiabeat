@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Disc3, Home, Library, Search } from "lucide-react";
+import { Disc3, Home, Library, Radio, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/home", label: "Home", Icon: Home },
   { href: "/search", label: "Search", Icon: Search },
   { href: "/player", label: "Player", Icon: Disc3 },
+  { href: "/listen", label: "Together", Icon: Radio },
   { href: "/library", label: "Library", Icon: Library },
 ];
 

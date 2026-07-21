@@ -14,6 +14,7 @@ const appPaths = [
   "/home",
   "/search",
   "/player",
+  "/listen",
   "/queue",
   "/library",
   "/liked",

@@ -127,6 +127,49 @@ export type AppUser = {
   displayName: string;
 };
 
+export type ListeningRoomRole = "host" | "listener";
+
+export type ListeningRoomStatus = "active" | "ended";
+
+export type ListeningRoomMember = {
+  userId: string;
+  displayName: string;
+  role: ListeningRoomRole;
+  joinedAt: string;
+  lastSeen: string;
+  online: boolean;
+};
+
+export type ListeningPlaybackSnapshot = {
+  currentSong: Song | null;
+  queue: Song[];
+  currentIndex: number;
+  isPlaying: boolean;
+  positionMs: number;
+  startedAt: string | null;
+  version: number;
+  updatedAt: string;
+};
+
+export type ListeningRoom = {
+  id: string;
+  code: string;
+  hostId: string;
+  status: ListeningRoomStatus;
+  createdAt: string;
+  expiresAt: string;
+  playback: ListeningPlaybackSnapshot;
+  members: ListeningRoomMember[];
+};
+
+export type ListeningSyncInput = {
+  currentSong: Song | null;
+  queue: Song[];
+  currentIndex: number;
+  isPlaying: boolean;
+  positionMs: number;
+};
+
 export type SpotifyProfile = {
   id: string;
   display_name?: string;

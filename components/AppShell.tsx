@@ -19,6 +19,7 @@ import {
   LogOut,
   Music2,
   Plus,
+  Radio,
   Search,
   Settings,
   Trees,
@@ -29,6 +30,7 @@ import type { PlayerSnapshot, Playlist, QueueItem, Song } from "@/lib/types";
 import { useAuthStore } from "@/store/authStore";
 import { useLibraryStore } from "@/store/libraryStore";
 import { usePlayerStore } from "@/store/playerStore";
+import { useListeningStore } from "@/store/listeningStore";
 
 type LibrarySnapshot = {
   likedSongs: Song[];
@@ -72,6 +74,7 @@ const sidebarItems = [
   { href: "/search", label: "Search", Icon: Search },
   { href: "/explore", label: "Explore", Icon: Compass },
   { href: "/player", label: "Player", Icon: Disc3 },
+  { href: "/listen", label: "Together", Icon: Radio },
   { href: "/library", label: "Library", Icon: Library },
 ];
 
@@ -209,6 +212,8 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
 
 function TopBar() {
   const router = useRouter();
+  const listeningRoom = useListeningStore((state) => state.room);
+  const listeningStatus = useListeningStore((state) => state.connectionStatus);
   return (
     <div className="top-bar">
       <div className="hidden items-center gap-2 lg:flex">
@@ -224,6 +229,17 @@ function TopBar() {
         <span className="text-ellipsis">Global Search</span>
       </Link>
       <div className="flex items-center gap-2">
+        <Link
+          href="/listen"
+          aria-label={listeningRoom ? `Listening room ${listeningRoom.code}` : "Listening Together"}
+          title="Listening Together"
+          className="top-icon-button listening-nav-button"
+          data-active={Boolean(listeningRoom)}
+          data-status={listeningStatus}
+        >
+          <Radio size={18} />
+          {listeningRoom ? <span>{listeningRoom.members.filter((member) => member.online).length}</span> : null}
+        </Link>
         <button
           aria-label="Notifications"
           onClick={() => notify("No new notifications")}

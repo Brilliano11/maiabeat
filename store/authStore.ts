@@ -136,6 +136,16 @@ export const useAuthStore = create<AuthState>()(
         return true;
       },
       logout: async () => {
+        const listeningStore = (await import("@/store/listeningStore"))
+          .useListeningStore.getState();
+        try {
+          if (listeningStore.activeRoomId && get().user?.id !== "local-preview") {
+            await listeningStore.leaveRoom();
+          }
+        } finally {
+          listeningStore.clearRoom();
+        }
+
         const supabase = createSupabaseBrowserClient();
         if (supabase) await supabase.auth.signOut();
         set({ user: null, error: null, loading: false });

@@ -2,10 +2,17 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { PlayerSnapshot, QueueItem, RepeatMode, Song } from "@/lib/types";
+import type {
+  ListeningSyncInput,
+  PlayerSnapshot,
+  QueueItem,
+  RepeatMode,
+  Song,
+} from "@/lib/types";
 import { notify } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useLibraryStore } from "@/store/libraryStore";
+import { useListeningStore } from "@/store/listeningStore";
 
 type PlayerStore = {
   sdkReady: boolean;
@@ -34,6 +41,7 @@ type PlayerStore = {
   setDeviceId: (deviceId: string | null) => void;
   setActiveDeviceId: (deviceId: string | null) => void;
   syncFromSdkState: (state: Spotify.PlaybackState | null) => void;
+  syncFromListeningRoom: (snapshot: ListeningSyncInput) => Promise<boolean>;
   setVolume: (volume: number) => Promise<void>;
   toggleMute: () => Promise<void>;
   playSong: (song: Song, options?: { replaceQueue?: boolean }) => Promise<void>;
@@ -91,8 +99,17 @@ let audioStartedTrackId: string | null = null;
 let playbackCommandId = 0;
 let pendingPlaybackTrackId: string | null = null;
 let pendingPlaybackStartedAt = 0;
+let listeningPlaybackTrackId: string | null = null;
 let queuePersistenceChain: Promise<void> = Promise.resolve();
 const pendingPlaybackTimeoutMs = 10_000;
+const listeningDriftToleranceMs = 1_800;
+
+function blockListenerControl(showMessage = true) {
+  const listening = useListeningStore.getState();
+  const blocked = Boolean(listening.activeRoomId && listening.role === "listener");
+  if (blocked && showMessage) notify("The room host controls playback.");
+  return blocked;
+}
 
 function markPlaybackTiming(name: string) {
   if (typeof performance === "undefined") return;
@@ -369,7 +386,112 @@ export const usePlayerStore = create<PlayerStore>()(
           persistQueueState(get());
         }
       },
+      syncFromListeningRoom: async (snapshot) => {
+        const before = get();
+        const currentSong = snapshot.currentSong;
+        const targetPosition = Math.max(
+          0,
+          Math.min(currentSong?.durationMs ?? 0, Math.round(snapshot.positionMs)),
+        );
+        const trackChanged = Boolean(
+          currentSong &&
+            (before.currentSong?.spotifyTrackId !== currentSong.spotifyTrackId ||
+              listeningPlaybackTrackId !== currentSong.spotifyTrackId),
+        );
+        const queue = snapshot.queue.map((song, position) => {
+          const existing = before.queue[position];
+          return existing?.song.spotifyTrackId === song.spotifyTrackId
+            ? { ...existing, song, position }
+            : { id: `listening-${song.spotifyTrackId}-${position}`, song, position };
+        });
+        const matchedIndex = currentSong
+          ? queue.findIndex(
+              (item) => item.song.spotifyTrackId === currentSong.spotifyTrackId,
+            )
+          : -1;
+        const currentIndex =
+          matchedIndex >= 0
+            ? matchedIndex
+            : snapshot.currentIndex >= 0 && snapshot.currentIndex < queue.length
+              ? snapshot.currentIndex
+              : 0;
+
+        set({
+          currentSong,
+          queue,
+          currentIndex,
+          isPlaying: Boolean(currentSong && snapshot.isPlaying),
+          progressMs: currentSong ? targetPosition : 0,
+          currentTime: currentSong ? Math.round(targetPosition / 1000) : 0,
+          durationMs: currentSong?.durationMs ?? 0,
+          duration: currentSong ? Math.round(currentSong.durationMs / 1000) : 0,
+          error: null,
+        });
+
+        try {
+          if (!currentSong) {
+            listeningPlaybackTrackId = null;
+            if (before.isPlaying) {
+              if (window.maiabeatPauseSpotifyPlayer) {
+                await window.maiabeatPauseSpotifyPlayer();
+              } else {
+                await callJson("/api/spotify/pause", { method: "PUT" });
+              }
+            }
+            return true;
+          }
+
+          if (trackChanged) {
+            markPlaybackPending(currentSong.spotifyTrackId);
+            const started = await playOnSpotify(before.deviceId, currentSong, targetPosition);
+            if (!started) {
+              clearPlaybackPending(currentSong.spotifyTrackId);
+              set({ isPlaying: false });
+              return false;
+            }
+            listeningPlaybackTrackId = currentSong.spotifyTrackId;
+            if (!snapshot.isPlaying) {
+              if (window.maiabeatPauseSpotifyPlayer) {
+                await window.maiabeatPauseSpotifyPlayer();
+              } else {
+                await callJson("/api/spotify/pause", { method: "PUT" });
+              }
+            }
+            return true;
+          }
+
+          const drift = Math.abs(before.progressMs - targetPosition);
+          if (drift > listeningDriftToleranceMs) {
+            await callJson("/api/spotify/seek", {
+              method: "PUT",
+              body: JSON.stringify({ positionMs: targetPosition }),
+            });
+          }
+          if (snapshot.isPlaying && !before.isPlaying) {
+            const started = await playOnSpotify(before.deviceId, currentSong, targetPosition);
+            if (!started) {
+              set({ isPlaying: false });
+              return false;
+            }
+            listeningPlaybackTrackId = currentSong.spotifyTrackId;
+          } else if (!snapshot.isPlaying && before.isPlaying) {
+            if (window.maiabeatPauseSpotifyPlayer) {
+              await window.maiabeatPauseSpotifyPlayer();
+            } else {
+              await callJson("/api/spotify/pause", { method: "PUT" });
+            }
+          }
+          return true;
+        } catch (error) {
+          set({
+            isPlaying: false,
+            error: error instanceof Error ? error.message : "Room playback sync failed.",
+          });
+          return false;
+        }
+      },
       playSong: async (song, options = {}) => {
+        if (blockListenerControl()) return;
         markPlaybackTiming("play-song-start");
         audioStartedTrackId = null;
         markPlaybackPending(song.spotifyTrackId);
@@ -422,6 +544,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }
       },
       pause: async () => {
+        if (blockListenerControl()) return;
         markPlaybackTiming("pause-click");
         set({ isPlaying: false });
         const pauseWithFallback = async () => {
@@ -451,6 +574,7 @@ export const usePlayerStore = create<PlayerStore>()(
         void pauseWithFallback();
       },
       resume: async () => {
+        if (blockListenerControl()) return;
         markPlaybackTiming("resume-click");
         const { currentSong, deviceId, activeDeviceId, progressMs } = get();
         if (!currentSong) return;
@@ -480,6 +604,7 @@ export const usePlayerStore = create<PlayerStore>()(
         else await get().resume();
       },
       next: async () => {
+        if (blockListenerControl()) return;
         const {
           currentSong,
           currentIndex,
@@ -560,6 +685,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }
       },
       previous: async () => {
+        if (blockListenerControl()) return;
         const { progressMs, history, deviceId } = get();
         if (progressMs > 3000 && get().currentSong) {
           await get().seek(0);
@@ -610,6 +736,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }
       },
       seek: async (positionMs) => {
+        if (blockListenerControl()) return;
         const safePosition = Math.max(0, Math.round(positionMs));
         set({
           progressMs: safePosition,
@@ -626,6 +753,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }
       },
       addToQueue: async (song) => {
+        if (blockListenerControl()) return;
         set((state) => ({
           queue: [
             ...state.queue,
@@ -635,6 +763,7 @@ export const usePlayerStore = create<PlayerStore>()(
         persistQueueState(get());
       },
       removeFromQueue: async (queueItemId) => {
+        if (blockListenerControl()) return;
         const removedSong = get().queue.find(
           (item) => item.id === queueItemId || item.song.spotifyTrackId === queueItemId,
         )?.song;
@@ -682,6 +811,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }
       },
       reorderQueueItem: (queueItemId, direction) => {
+        if (blockListenerControl()) return;
         set((state) => {
           const index = state.queue.findIndex((item) => item.id === queueItemId);
           const target = direction === "up" ? index - 1 : index + 1;
@@ -702,6 +832,7 @@ export const usePlayerStore = create<PlayerStore>()(
         persistQueueState(get());
       },
       clearQueue: async () => {
+        if (blockListenerControl()) return;
         set({
           queue: [],
           currentIndex: 0,
@@ -713,6 +844,7 @@ export const usePlayerStore = create<PlayerStore>()(
         persistQueueState(get());
       },
       toggleShuffle: () => {
+        if (blockListenerControl()) return;
         set((state) => ({
           shuffleEnabled: !state.shuffleEnabled,
           shuffle: !state.shuffleEnabled,
@@ -721,6 +853,7 @@ export const usePlayerStore = create<PlayerStore>()(
         persistQueueState(get());
       },
       cycleRepeatMode: () => {
+        if (blockListenerControl()) return;
         set((state) => {
           const repeatMode: RepeatMode =
             state.repeatMode === "off"
@@ -743,6 +876,7 @@ export const usePlayerStore = create<PlayerStore>()(
         void get().previous();
       },
       setQueue: (songs, startIndex = 0) => {
+        if (blockListenerControl()) return;
         const nextQueue = songs.map(queueItem);
         const safeStartIndex =
           Number.isInteger(startIndex) && startIndex >= 0 && startIndex < nextQueue.length
@@ -770,6 +904,7 @@ export const usePlayerStore = create<PlayerStore>()(
       },
       cycleRepeat: () => get().cycleRepeatMode(),
       handleTrackEnded: () => {
+        if (blockListenerControl(false)) return;
         const { currentSong, deviceId, repeatMode } = get();
         if (repeatMode === "one" && currentSong) {
           set({ isPlaying: true, progressMs: 0, currentTime: 0 });

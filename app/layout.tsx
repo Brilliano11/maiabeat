@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { SpotifyPlayerProvider } from "@/components/music/SpotifyPlayerProvider";
+import { ListeningTogetherProvider } from "@/components/listening/ListeningTogetherProvider";
 import "./globals.css";
 
 const themeBootstrapScript = `
@@ -71,7 +72,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body className="min-h-full bg-[#111]">
-        <SpotifyPlayerProvider>{children}</SpotifyPlayerProvider>
+        <SpotifyPlayerProvider>
+          <ListeningTogetherProvider>{children}</ListeningTogetherProvider>
+        </SpotifyPlayerProvider>
         <ServiceWorkerRegister />
       </body>
     </html>

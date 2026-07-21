@@ -1,11 +1,12 @@
-const CACHE_NAME = "maiabeat-static-v1";
+const CACHE_NAME = "maiabeat-static-v2";
 const STATIC_ASSETS = [
   "/",
   "/splash",
   "/offline",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
-  "/icons/icon-512.png"
+  "/icons/icon-512.png",
+  "/icons/icon-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {

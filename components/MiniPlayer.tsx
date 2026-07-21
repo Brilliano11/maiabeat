@@ -6,6 +6,7 @@ import { Heart, ListMusic, Pause, Play, SkipForward } from "lucide-react";
 import { usePlayerStore } from "@/store/playerStore";
 import { useLibraryStore } from "@/store/libraryStore";
 import { formatTime } from "@/lib/utils";
+import { useListeningStore } from "@/store/listeningStore";
 
 export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
   const currentSong = usePlayerStore((state) => state.currentSong);
@@ -17,6 +18,9 @@ export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
   const toggleLike = useLibraryStore((state) => state.toggleLike);
   const isLiked = useLibraryStore((state) =>
     currentSong ? state.isLiked(currentSong.id ?? currentSong.spotifyTrackId) : false,
+  );
+  const controlsLocked = useListeningStore(
+    (state) => Boolean(state.activeRoomId && state.role === "listener"),
   );
 
   if (!currentSong || currentSong.spotifyUri.includes("demo-")) return null;
@@ -48,6 +52,7 @@ export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
           </button>
           <button
             aria-label="Play or pause"
+            disabled={controlsLocked}
             onClick={() => void togglePlay()}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border-[3px] border-black bg-[#FFD600] text-black sm:h-11 sm:w-11"
           >
@@ -55,6 +60,7 @@ export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
           </button>
           <button
             aria-label="Next track"
+            disabled={controlsLocked}
             onClick={nextTrack}
             className="hidden h-11 w-11 shrink-0 place-items-center rounded-xl border-[3px] border-black bg-white text-black sm:grid"
           >
@@ -98,6 +104,7 @@ export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
             </button>
             <button
               aria-label="Play or pause"
+              disabled={controlsLocked}
               onClick={() => void togglePlay()}
               className="grid h-12 w-12 place-items-center rounded-xl border-[3px] border-black bg-[#FFD600] text-black shadow-[4px_4px_0_#000]"
             >
@@ -105,6 +112,7 @@ export function MiniPlayer({ onOpenQueue }: { onOpenQueue: () => void }) {
             </button>
             <button
               aria-label="Next track"
+              disabled={controlsLocked}
               onClick={nextTrack}
               className="grid h-11 w-11 place-items-center rounded-xl border-[3px] border-black bg-white text-black"
             >

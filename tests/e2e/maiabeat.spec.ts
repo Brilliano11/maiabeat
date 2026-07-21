@@ -13,6 +13,9 @@ test("protected page redirects anonymous users to login", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/login\?next=%2Fhome$/);
   await expect(page.getByRole("heading", { name: "Maiabeat" })).toBeVisible();
+
+  await page.goto("/listen");
+  await expect(page).toHaveURL(/\/login\?next=%2Flisten$/);
 });
 
 test("responses include production security headers", async ({ request }) => {
@@ -29,6 +32,43 @@ test("responses include production security headers", async ({ request }) => {
   expect(csp).toContain("default-src 'self'");
   expect(csp).toContain("frame-ancestors 'none'");
   expect(csp).toContain("https://sdk.scdn.co");
+});
+
+test("app icon metadata and PWA manifest use the Maiabeat logo", async ({
+  page,
+  request,
+}) => {
+  const manifestResponse = await request.get("/manifest.webmanifest");
+  expect(manifestResponse.ok()).toBe(true);
+  const manifest = (await manifestResponse.json()) as {
+    icons?: Array<{ src?: string; purpose?: string }>;
+  };
+  expect(manifest.icons).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ src: "/icons/icon-192.png", purpose: "any" }),
+      expect.objectContaining({ src: "/icons/icon-512.png", purpose: "any" }),
+      expect.objectContaining({
+        src: "/icons/icon-maskable-512.png",
+        purpose: "maskable",
+      }),
+    ]),
+  );
+
+  for (const path of [
+    "/icons/icon-192.png",
+    "/icons/icon-512.png",
+    "/icons/icon-maskable-512.png",
+  ]) {
+    const response = await request.get(path);
+    expect(response.ok(), path).toBe(true);
+    expect(response.headers()["content-type"], path).toContain("image/png");
+  }
+
+  await page.goto("/login");
+  await expect(page.locator('link[rel="icon"][href^="/icon.png"]')).toHaveCount(1);
+  await expect(
+    page.locator('link[rel="apple-touch-icon"][href^="/apple-icon.png"]'),
+  ).toHaveCount(1);
 });
 
 test("playlist cover upload requires authentication", async ({ request }) => {
@@ -712,6 +752,279 @@ test("important private API routes return JSON instead of 404 HTML", async ({ re
     expect(response.headers()["content-type"], path).toContain("application/json");
     await expect(response.text(), path).resolves.toContain("Login required");
   }
+
+  const listeningResponse = await request.post("/api/listening/rooms", {
+    data: { playback: {} },
+  });
+  expect(listeningResponse.status()).toBe(401);
+  expect(listeningResponse.headers()["content-type"]).toContain("application/json");
+  await expect(listeningResponse.text()).resolves.toContain("Login required");
+});
+
+test("Listening Together lobby explains account requirement in preview", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview");
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/listen?code=SYNC24");
+
+  await expect(page.getByRole("heading", { name: "Listening Together" })).toBeVisible();
+  await expect(page.getByLabel("Room code")).toHaveValue("SYNC24");
+  await expect(page.getByRole("button", { name: "Start room" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Join room" })).toBeDisabled();
+  await expect(page.getByText("Use a real account to create or join live rooms.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/reset-preview",
+  );
+  await expect(page.getByText("Preview mode", { exact: true })).toBeVisible();
+});
+
+test("Listening Together retries host playback when the listener device becomes ready", async ({ page }) => {
+  const playRequests: Array<{ spotifyUri?: string; positionMs?: number }> = [];
+  const now = new Date().toISOString();
+  const song = {
+    id: "device-ready-song",
+    spotifyTrackId: "device-ready-song",
+    spotifyUri: "spotify:track:device-ready-song",
+    title: "Device Ready Song",
+    artist: "Maiabeat Live",
+    coverUrl: "/icons/cover-cyan.svg",
+    durationMs: 210000,
+  };
+  const room = {
+    id: "device-ready-room",
+    code: "READY2",
+    hostId: "room-host",
+    status: "active",
+    createdAt: now,
+    expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    playback: {
+      currentSong: song,
+      queue: [song],
+      currentIndex: 0,
+      isPlaying: true,
+      positionMs: 42000,
+      startedAt: now,
+      version: 3,
+      updatedAt: now,
+    },
+    members: [
+      {
+        userId: "room-host",
+        displayName: "Room Host",
+        role: "host",
+        joinedAt: now,
+        lastSeen: now,
+        online: true,
+      },
+      {
+        userId: "room-listener",
+        displayName: "Room Listener",
+        role: "listener",
+        joinedAt: now,
+        lastSeen: now,
+        online: true,
+      },
+    ],
+  };
+
+  await page.addInitScript(() => {
+    const listeners: Record<string, (payload: unknown) => void> = {};
+    class MockSpotifyPlayer {
+      addListener(event: string, callback: (payload: unknown) => void) {
+        listeners[event] = callback;
+      }
+      async connect() {
+        window.setTimeout(() => listeners.ready?.({ device_id: "listener-device" }), 700);
+        return true;
+      }
+      disconnect() {}
+      async activateElement() {}
+      async pause() {}
+      async resume() {}
+      async setVolume() {}
+    }
+
+    (window as unknown as { Spotify: { Player: typeof MockSpotifyPlayer } }).Spotify = {
+      Player: MockSpotifyPlayer,
+    };
+  });
+  await page.route("**/api/library", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        likedSongs: [],
+        playlists: [],
+        recentlyPlayed: [],
+        playlistSongs: [],
+        queue: [],
+        playerState: null,
+      }),
+    });
+  });
+  await page.route("**/api/spotify/playback-state", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ state: null }),
+    });
+  });
+  await page.route("**/api/spotify/transfer", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/spotify/play", async (route) => {
+    playRequests.push(route.request().postDataJSON());
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.route("**/api/listening/rooms/device-ready-room", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ room }),
+    });
+  });
+
+  await page.goto("/preview");
+  await expect(page).toHaveURL(/\/home$/);
+  await page.evaluate((roomId) => {
+    localStorage.setItem(
+      "maiabeat-auth",
+      JSON.stringify({
+        state: {
+          user: {
+            id: "room-listener",
+            email: "listener@example.com",
+            displayName: "Room Listener",
+          },
+          loading: false,
+          hydrated: true,
+          error: null,
+        },
+        version: 0,
+      }),
+    );
+    localStorage.setItem(
+      "maiabeat-listening-room",
+      JSON.stringify({ state: { activeRoomId: roomId }, version: 0 }),
+    );
+    localStorage.removeItem("maiabeat-player");
+  }, room.id);
+
+  await page.reload();
+  await page.goto("/listen");
+  await expect(
+    page.locator(".listening-now-playing").getByText("Device Ready Song", { exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => playRequests.at(-1)?.spotifyUri ?? null).toBe(song.spotifyUri);
+  expect(playRequests.at(-1)?.positionMs ?? 0).toBeGreaterThanOrEqual(42000);
+  expect(playRequests.at(-1)?.positionMs ?? 0).toBeLessThan(60000);
+});
+
+test("Listening Together renders a synced listener room and locks host controls", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview");
+  await expect(page).toHaveURL(/\/home$/);
+
+  await page.evaluate(() => {
+    const song = {
+      id: "room-song",
+      spotifyTrackId: "room-song",
+      spotifyUri: "spotify:track:room-song",
+      title: "Same Moment",
+      artist: "Maiabeat Live",
+      coverUrl: "/icons/cover-cyan.svg",
+      durationMs: 210000,
+    };
+    const now = new Date().toISOString();
+    const room = {
+      id: "room-live",
+      code: "SYNC24",
+      hostId: "host-user",
+      status: "active",
+      createdAt: now,
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      playback: {
+        currentSong: song,
+        queue: [song],
+        currentIndex: 0,
+        isPlaying: true,
+        positionMs: 42000,
+        startedAt: now,
+        version: 7,
+        updatedAt: now,
+      },
+      members: [
+        {
+          userId: "host-user",
+          displayName: "Room Host",
+          role: "host",
+          joinedAt: now,
+          lastSeen: now,
+          online: true,
+        },
+        {
+          userId: "local-preview",
+          displayName: "Anggita",
+          role: "listener",
+          joinedAt: now,
+          lastSeen: now,
+          online: true,
+        },
+      ],
+    };
+
+    localStorage.setItem(
+      "maiabeat-listening-room",
+      JSON.stringify({
+        state: {
+          activeRoomId: room.id,
+          room,
+          role: "listener",
+          connectionStatus: "connected",
+          loading: false,
+          error: null,
+        },
+        version: 0,
+      }),
+    );
+    localStorage.setItem(
+      "maiabeat-player",
+      JSON.stringify({
+        state: {
+          currentSong: song,
+          queue: [{ id: "room-song-0", song, position: 0 }],
+          currentIndex: 0,
+          isPlaying: true,
+          progressMs: 42000,
+          durationMs: song.durationMs,
+          shuffleEnabled: false,
+          repeatMode: "off",
+          volume: 0.8,
+          lastAudibleVolume: 0.8,
+          isMuted: false,
+          history: [],
+        },
+        version: 0,
+      }),
+    );
+  });
+
+  await page.goto("/listen?code=SYNC24");
+  await expect(page.getByText("SYNC24", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".listening-now-playing").getByText("Same Moment", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Room Host", { exact: true })).toBeVisible();
+  await expect(page.getByText("Anggita", { exact: true })).toBeVisible();
+  await expect(page.getByText("Host controlled", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".listening-now-playing").getByRole("button", { name: "Play or pause" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Listening room SYNC24" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Together", exact: true })).toBeVisible();
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
 });
 
 test("Maria Forest theme persists and keeps responsive navigation fixed", async ({ page }) => {
@@ -735,7 +1048,7 @@ test("Maria Forest theme persists and keeps responsive navigation fixed", async 
   await expect(page.locator(".app-shell")).toHaveCSS("--yellow", "#68000c");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator(".bottom-navigation-item")).toHaveCount(4);
+  await expect(page.locator(".bottom-navigation-item")).toHaveCount(5);
   await expect(page.locator(".bottom-navigation-shell")).toHaveCSS("position", "fixed");
   await expect(page.locator(".desktop-sidebar")).toHaveCSS("display", "none");
 
