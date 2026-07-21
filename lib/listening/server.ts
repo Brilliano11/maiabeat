@@ -247,6 +247,7 @@ async function roomFromRow(row: ListeningRoomRow): Promise<ListeningRoom> {
     id: row.id,
     code: row.code,
     hostId: row.host_id,
+    transport: "database",
     status: row.status,
     createdAt: row.created_at,
     expiresAt: row.expires_at,

@@ -131,6 +131,8 @@ export type ListeningRoomRole = "host" | "listener";
 
 export type ListeningRoomStatus = "active" | "ended";
 
+export type ListeningRoomTransport = "database" | "broadcast";
+
 export type ListeningRoomMember = {
   userId: string;
   displayName: string;
@@ -155,6 +157,7 @@ export type ListeningRoom = {
   id: string;
   code: string;
   hostId: string;
+  transport: ListeningRoomTransport;
   status: ListeningRoomStatus;
   createdAt: string;
   expiresAt: string;

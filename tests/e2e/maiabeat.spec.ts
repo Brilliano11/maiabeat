@@ -779,6 +779,200 @@ test("Listening Together lobby explains account requirement in preview", async (
   await expect(page.getByText("Preview mode", { exact: true })).toBeVisible();
 });
 
+test("Listening Together connects host and listener through the Realtime fallback", async ({
+  browser,
+  page: hostPage,
+  baseURL,
+}) => {
+  const song = {
+    id: "broadcast-song",
+    spotifyTrackId: "broadcast-song",
+    spotifyUri: "spotify:track:broadcast-song",
+    title: "Realtime Together",
+    artist: "Maiabeat Live",
+    coverUrl: "/icons/cover-cyan.svg",
+    durationMs: 210000,
+  };
+  const listenerPlayRequests: Array<{ spotifyUri?: string }> = [];
+
+  const preparePage = async (
+    page: typeof hostPage,
+    user: { id: string; email: string; displayName: string },
+    withHostPlayback: boolean,
+  ) => {
+    await page.addInitScript((deviceId) => {
+      const listeners: Record<string, (payload: unknown) => void> = {};
+      class MockSpotifyPlayer {
+        addListener(event: string, callback: (payload: unknown) => void) {
+          listeners[event] = callback;
+        }
+        async connect() {
+          window.setTimeout(() => listeners.ready?.({ device_id: deviceId }), 0);
+          return true;
+        }
+        disconnect() {}
+        async activateElement() {}
+        async pause() {}
+        async resume() {}
+        async setVolume() {}
+      }
+
+      (window as unknown as { Spotify: { Player: typeof MockSpotifyPlayer } }).Spotify = {
+        Player: MockSpotifyPlayer,
+      };
+    }, `${user.id}-device`);
+
+    await page.route("**/api/listening/rooms", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Listening Together database migration has not been applied yet.",
+        }),
+      });
+    });
+    await page.route("**/api/listening/rooms/join", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Listening Together database migration has not been applied yet.",
+        }),
+      });
+    });
+    await page.route("**/api/library", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          likedSongs: [],
+          playlists: [],
+          recentlyPlayed: [],
+          playlistSongs: [],
+          queue: withHostPlayback ? [{ id: "broadcast-song-0", song, position: 0 }] : [],
+          playerState: withHostPlayback
+            ? {
+                currentSong: song,
+                currentIndex: 0,
+                isPlaying: true,
+                progressMs: 12000,
+                shuffleEnabled: false,
+                repeatMode: "off",
+              }
+            : null,
+        }),
+      });
+    });
+    await page.route("**/api/spotify/playback-state", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ state: null }),
+      });
+    });
+    await page.route("**/api/spotify/transfer", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+    await page.route("**/api/spotify/play", async (route) => {
+      if (!withHostPlayback) listenerPlayRequests.push(route.request().postDataJSON());
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await page.goto("/preview");
+    await expect(page).toHaveURL(/\/home$/);
+    await page.evaluate(
+      ({ nextUser, nextSong, seedPlayback }) => {
+        localStorage.setItem(
+          "maiabeat-auth",
+          JSON.stringify({
+            state: {
+              user: nextUser,
+              loading: false,
+              hydrated: true,
+              error: null,
+            },
+            version: 0,
+          }),
+        );
+        localStorage.removeItem("maiabeat-listening-room");
+        localStorage.setItem(
+          "maiabeat-player",
+          JSON.stringify({
+            state: {
+              currentSong: seedPlayback ? nextSong : null,
+              queue: seedPlayback
+                ? [{ id: "broadcast-song-0", song: nextSong, position: 0 }]
+                : [],
+              currentIndex: 0,
+              shuffleEnabled: false,
+              repeatMode: "off",
+              volume: 0.8,
+              lastAudibleVolume: 0.8,
+              isMuted: false,
+              history: [],
+            },
+            version: 0,
+          }),
+        );
+      },
+      { nextUser: user, nextSong: song, seedPlayback: withHostPlayback },
+    );
+  };
+
+  const listenerContext = await browser.newContext({ baseURL });
+  const listenerPage = await listenerContext.newPage();
+  try {
+    await preparePage(
+      hostPage,
+      { id: "broadcast-host", email: "host@example.com", displayName: "Room Host" },
+      true,
+    );
+    await hostPage.goto("/listen");
+    await expect(
+      hostPage.getByText("Realtime Together", { exact: true }).last(),
+    ).toBeVisible();
+    await hostPage.getByRole("button", { name: "Start room" }).click();
+    await expect(hostPage.getByText("Live", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    const roomCode = await hostPage.locator(".listening-room-code-block strong").innerText();
+    expect(roomCode).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+    await expect(hostPage.getByText("Starting...", { exact: true })).toHaveCount(0);
+
+    await preparePage(
+      listenerPage,
+      {
+        id: "broadcast-listener",
+        email: "listener@example.com",
+        displayName: "Room Listener",
+      },
+      false,
+    );
+    await listenerPage.goto(`/listen?code=${roomCode}`);
+    await listenerPage.getByRole("button", { name: "Join room" }).click();
+
+    await expect(listenerPage.getByText("Live", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      listenerPage
+        .locator(".listening-now-playing")
+        .getByText("Realtime Together", { exact: true }),
+    ).toBeVisible();
+    await expect(listenerPage.getByText("Room Host", { exact: true })).toBeVisible();
+    await expect(listenerPage.getByText("Room Listener", { exact: true })).toBeVisible();
+    await expect.poll(() => listenerPlayRequests.at(-1)?.spotifyUri ?? null).toBe(
+      song.spotifyUri,
+    );
+  } finally {
+    await listenerContext.close();
+  }
+});
+
 test("Listening Together retries host playback when the listener device becomes ready", async ({ page }) => {
   const playRequests: Array<{ spotifyUri?: string; positionMs?: number }> = [];
   const now = new Date().toISOString();

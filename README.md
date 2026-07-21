@@ -37,8 +37,10 @@ http://127.0.0.1:3002
    `playlist-covers` Storage bucket used for cropped playlist artwork.
 5. For an existing Maiabeat database, run `supabase/playlist_covers_storage.sql` and
    `supabase/listening_together.sql` without replaying the full schema. The listening migration
-   adds room/member tables, RLS policies, and Realtime publication entries without modifying
-   playlist, queue, profile, or playback-history rows.
+   adds durable room/member tables, RLS policies, and Realtime publication entries without
+   modifying playlist, queue, profile, or playback-history rows. When this migration is not yet
+   installed, Listening Together automatically uses an ephemeral Supabase Realtime room that
+   remains available while the host is online.
 6. In Supabase Auth settings, decide whether new users must confirm email before logging in.
 
 ## Spotify Setup
@@ -120,6 +122,8 @@ Maiabeat stores Spotify refresh tokens only in Supabase through server routes.
 - Each person should connect their own Spotify account.
 - Listening Together requires every participant to have Spotify Premium and an active Maiabeat
   Spotify connection. The host controls playback; volume remains personal to each listener.
+  Ephemeral fallback rooms end when the host disconnects; install the listening migration for
+  durable room recovery.
 - The app does not download, store, rip, or cache Spotify audio.
 - Offline mode only caches static UI assets, not songs.
 - Spotify Development Mode may require manually adding test users in the Spotify dashboard.

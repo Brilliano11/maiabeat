@@ -126,7 +126,13 @@ export function ListeningPageClient({ initialCode }: { initialCode: string }) {
                     const created = await createRoom(
                       createListeningSnapshot(usePlayerStore.getState()),
                     );
-                    if (created) notify(`Room ${created.code} is live`);
+                    if (created) {
+                      notify(
+                        created.transport === "broadcast"
+                          ? `Connecting room ${created.code}`
+                          : `Room ${created.code} is live`,
+                      );
+                    }
                   }}
                 >
                   {pendingAction === "create" ? "Starting..." : "Start room"}
@@ -166,7 +172,13 @@ export function ListeningPageClient({ initialCode }: { initialCode: string }) {
                   disabled={loading || code.length !== 6 || isPreview}
                   onClick={async () => {
                     const joined = await joinRoom(code);
-                    if (joined) notify(`Joined ${joined.code}`);
+                    if (joined) {
+                      notify(
+                        joined.transport === "broadcast"
+                          ? `Finding host for ${joined.code}`
+                          : `Joined ${joined.code}`,
+                      );
+                    }
                   }}
                 >
                   {pendingAction === "join" ? "Joining..." : "Join room"}
