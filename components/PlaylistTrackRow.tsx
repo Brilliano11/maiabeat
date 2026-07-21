@@ -37,7 +37,10 @@ export function PlaylistTrackRow({
       />
       <button type="button" onClick={onPlay} className="min-w-0 text-left">
         <span className="text-ellipsis block font-black">{song.title}</span>
-        <span className="text-ellipsis block text-xs font-bold text-black/65">
+        <span
+          className="text-ellipsis block text-xs font-bold text-black/65"
+          style={{ color: "var(--text-muted, rgb(17 17 17 / 0.65))" }}
+        >
           {song.artist} · {formatTime(song.durationMs / 1000)}
         </span>
       </button>

@@ -311,6 +311,20 @@ export async function updatePlaylistForUser(
   return playlistFromRow(data as PlaylistRow);
 }
 
+export async function getPlaylistCoverForUser(userId: string, playlistId: string) {
+  const admin = requireAdmin();
+  const { data, error } = await admin
+    .from("playlists")
+    .select("cover_url")
+    .eq("id", playlistId)
+    .eq("owner_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("Playlist not found.");
+  return (data.cover_url as string | null) ?? null;
+}
+
 export async function deletePlaylistForUser(userId: string, playlistId: string) {
   const admin = requireAdmin();
   const { error } = await admin

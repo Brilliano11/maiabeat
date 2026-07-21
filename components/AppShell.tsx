@@ -93,7 +93,13 @@ function DesktopSidebar({ onCreatePlaylist }: { onCreatePlaylist: () => void }) 
   );
 
   return (
-    <aside className="desktop-sidebar">
+    <aside
+      className="desktop-sidebar"
+      style={{
+        overflowY: "auto",
+        scrollbarGutter: "stable",
+      }}
+    >
       <Link href="/home" className="sidebar-brand mb-8 flex min-h-12 items-center gap-3 rounded-2xl border-[3px] border-black bg-[#FF4D00] px-3 text-white shadow-[5px_5px_0_#000]">
         <Music2 size={24} strokeWidth={3} />
         <span className="text-xl font-black">Maiabeat</span>

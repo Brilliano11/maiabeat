@@ -31,6 +31,13 @@ test("responses include production security headers", async ({ request }) => {
   expect(csp).toContain("https://sdk.scdn.co");
 });
 
+test("playlist cover upload requires authentication", async ({ request }) => {
+  const response = await request.post("/api/library/playlists/test-playlist/cover");
+
+  expect(response.status()).toBe(401);
+  await expect(response.json()).resolves.toMatchObject({ error: "Login required." });
+});
+
 test("Spotify callback rejects invalid state without exposing internal messages", async ({
   request,
 }) => {
@@ -456,6 +463,50 @@ test("playlist management edits details, reorders, removes, and plays", async ({
   await expect(page.getByRole("heading", { name: "Road Mix" })).toBeVisible();
   await expect(page.locator(".playlist-track-row").first()).toContainText("Electric Sky");
   await expect(page.locator(".playlist-track-row")).toHaveCount(2);
+});
+
+test("playlist editor crops a gallery cover before saving", async ({ page }) => {
+  const landscapePng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAZAAAADICAYAAADGFbfiAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAASiSURBVHhe7dUxDcRAAAPB408qMALnvrRk5Y1gioGw2nOee4Fv9z3AH6eDAaKDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggDAQGDoYIAwEhg4GCAOBoYMBwkBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBAYOhggDASGDgYIA4GhgwHCQGDoYIAwEBg6GCAMBIYOBggDgaGDAcJAYOhggfjBWj3tFnH54AAAAAElFTkSuQmCC",
+    "base64",
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview");
+  await expect(page).toHaveURL(/\/home$/);
+  await page.goto("/playlists/playlist-anggitunes");
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit details" });
+  await editor.locator('input[type="file"]').setInputFiles({
+    name: "custom-cover.png",
+    mimeType: "image/png",
+    buffer: landscapePng,
+  });
+
+  const cropEditor = page.getByRole("dialog", { name: "Adjust cover" });
+  await expect(cropEditor).toBeVisible();
+  const cropImage = cropEditor.locator(".playlist-cover-crop-media");
+  const initialTransform = await cropImage.getAttribute("style");
+  const cropStage = cropEditor.locator(".playlist-cover-crop-stage");
+  const cropBox = await cropStage.boundingBox();
+  expect(cropBox).not.toBeNull();
+  await page.mouse.move(cropBox!.x + cropBox!.width / 2, cropBox!.y + cropBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(cropBox!.x + cropBox!.width / 2 - 70, cropBox!.y + cropBox!.height / 2);
+  await page.mouse.up();
+  await expect(cropImage).not.toHaveAttribute("style", initialTransform ?? "");
+
+  const zoom = cropEditor.getByRole("slider", { name: /Zoom/ });
+  await expect(zoom).toBeVisible();
+  await zoom.fill("1.6");
+  await cropEditor.getByRole("button", { name: "Use cover" }).click();
+  await expect(editor.getByRole("button", { name: "Custom playlist cover" })).toBeVisible();
+  await editor.getByRole("button", { name: "Save changes" }).click();
+
+  await expect
+    .poll(() => page.locator(".playlist-detail-header img").getAttribute("src"))
+    .toContain("data:image/jpeg;base64");
 });
 
 test("lyrics panel follows playback, seeks, and opens fullscreen", async ({ page }) => {

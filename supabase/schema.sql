@@ -1,5 +1,18 @@
 create extension if not exists "pgcrypto";
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'playlist-covers',
+  'playlist-covers',
+  true,
+  1500000,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null unique,

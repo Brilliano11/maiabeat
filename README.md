@@ -33,8 +33,11 @@ http://127.0.0.1:3002
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-4. Run `supabase/schema.sql` in the Supabase SQL editor.
-5. In Supabase Auth settings, decide whether new users must confirm email before logging in.
+4. Run `supabase/schema.sql` in the Supabase SQL editor. This also creates the public
+   `playlist-covers` Storage bucket used for cropped playlist artwork.
+5. For an existing Maiabeat database, run only `supabase/playlist_covers_storage.sql` to add or
+   update the cover bucket without replaying the full schema.
+6. In Supabase Auth settings, decide whether new users must confirm email before logging in.
 
 ## Spotify Setup
 

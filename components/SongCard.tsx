@@ -51,7 +51,12 @@ export function SongCard({ song, songs, onAddToPlaylist, onPlay, compact = false
         />
         <button onClick={play} className="min-w-0 flex-1 text-left">
           <p className="text-ellipsis card-title">{song.title}</p>
-          <p className="text-ellipsis text-xs font-bold text-black/70 sm:text-sm">{song.artist}</p>
+          <p
+            className="text-ellipsis text-xs font-bold text-black/70 sm:text-sm"
+            style={{ color: "var(--text-muted, rgb(17 17 17 / 0.7))" }}
+          >
+            {song.artist}
+          </p>
           {!song.spotifyUri || song.spotifyUri.includes("demo-") ? (
             <p className="text-ellipsis text-[11px] font-black text-[#FF3B6B]">
               Connect Spotify to play

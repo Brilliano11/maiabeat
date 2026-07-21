@@ -11,23 +11,26 @@ import type { Playlist } from "@/lib/types";
 export function PlaylistCard({ playlist }: { playlist: Playlist }) {
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist);
   const user = useAuthStore((state) => state.user);
+  const coverUrl = playlist.coverUrl || "/icons/default-cover.svg";
   const canManage =
     user?.id === "local-preview" || playlist.ownerId === user?.id || playlist.userId === user?.id;
 
   return (
-    <BrutalCard className="p-3">
-      <div className="playlist-card">
+    <BrutalCard className="playlist-card-shell p-3">
+      <div className="playlist-card" style={{ gridTemplateColumns: "minmax(0, 1fr) 44px" }}>
         <Link
           href={`/playlists/${playlist.id}`}
           prefetch={false}
-          className="grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-center gap-3 rounded-xl outline-none focus-visible:ring-4 focus-visible:ring-[#FFD600]"
+          className="playlist-card-link grid min-w-0 grid-cols-[54px_minmax(0,1fr)] items-center gap-3 rounded-xl outline-none focus-visible:ring-4 focus-visible:ring-[#FFD600]"
+          style={{ width: "100%" }}
         >
           <Image
-            src={playlist.coverUrl || "/icons/default-cover.svg"}
+            src={coverUrl}
             alt=""
             width={320}
             height={320}
             sizes="56px"
+            unoptimized={coverUrl.startsWith("data:image/")}
             className="h-14 w-14 rounded-xl border-[3px] border-black object-cover"
           />
           <div className="min-w-0">

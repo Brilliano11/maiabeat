@@ -3,7 +3,17 @@
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Lock, Pencil, Play, Shuffle, Trash2, UsersRound } from "lucide-react";
+import {
+  Compass,
+  Lock,
+  Music2,
+  Pencil,
+  Play,
+  Search,
+  Shuffle,
+  Trash2,
+  UsersRound,
+} from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
 import { BrutalButton } from "@/components/BrutalButton";
@@ -66,6 +76,7 @@ export default function PlaylistDetailPage() {
 
   const canManage =
     user?.id === "local-preview" || playlist.ownerId === user?.id || playlist.userId === user?.id;
+  const coverUrl = playlist.coverUrl || "/icons/default-cover.svg";
   const moveSong = (originalIndex: number, direction: "up" | "down") => {
     const target = direction === "up" ? originalIndex - 1 : originalIndex + 1;
     if (target < 0 || target >= playlist.songIds.length) return;
@@ -84,11 +95,12 @@ export default function PlaylistDetailPage() {
         <div className="page-stack">
           <header className="playlist-detail-header">
             <Image
-              src={playlist.coverUrl || "/icons/default-cover.svg"}
+              src={coverUrl}
               alt=""
               width={160}
               height={160}
               sizes="(min-width: 768px) 144px, 112px"
+              unoptimized={coverUrl.startsWith("data:image/")}
               className="h-28 w-28 rounded-2xl border-[3px] border-black object-cover md:h-36 md:w-36"
             />
             <div className="min-w-0">
@@ -173,9 +185,52 @@ export default function PlaylistDetailPage() {
                 />
               ))}
               {!entries.length ? (
-                <BrutalCard className="text-center font-black">
-                  Add songs from Search or Home.
-                </BrutalCard>
+                <div className="playlist-empty-state">
+                  <div className="playlist-empty-art" aria-hidden="true">
+                    <div className="playlist-empty-cover-shadow" />
+                    <div className="playlist-empty-cover">
+                      <Image
+                        src={coverUrl}
+                        alt=""
+                        width={180}
+                        height={180}
+                        sizes="(min-width: 640px) 180px, 132px"
+                        unoptimized={coverUrl.startsWith("data:image/")}
+                      />
+                      <span className="playlist-empty-note">
+                        <Music2 size={24} strokeWidth={3} />
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="playlist-empty-content">
+                    <p className="page-kicker">Empty playlist</p>
+                    <h3>{canManage ? "Start your tracklist" : "No songs here yet"}</h3>
+                    <p>
+                      {canManage
+                        ? "Find a song you love and make this playlist yours."
+                        : "The owner has not added any songs to this playlist yet."}
+                    </p>
+                    <div className="playlist-empty-actions">
+                      {canManage ? (
+                        <BrutalButton
+                          tone="green"
+                          icon={<Search size={17} />}
+                          onClick={() => router.push("/search")}
+                        >
+                          Find songs
+                        </BrutalButton>
+                      ) : null}
+                      <BrutalButton
+                        tone={canManage ? "yellow" : "green"}
+                        icon={<Compass size={17} />}
+                        onClick={() => router.push("/explore")}
+                      >
+                        Explore
+                      </BrutalButton>
+                    </div>
+                  </div>
+                </div>
               ) : null}
             </div>
           </section>
